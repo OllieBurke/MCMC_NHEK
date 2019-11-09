@@ -24,7 +24,7 @@ warnings.filterwarnings('ignore')  # Because of stiff differential equation.
 def units():
     """
     Bloody units... throughout the entire code, we define everything in terms of
-    seconds.
+    seconds. Because units are shit.
     """
     G = 6.6726e-11
     c = 299792458
