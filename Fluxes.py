@@ -63,7 +63,7 @@ def Paths():
 def Flux_Data():
     """
     This function reads in each of the flux data that was given to me by Niels
-    back in the day.
+    back in the day. Hello there. 
     """
     path_Ext,path_a0998,path_a097,Home_Of_Code = Paths()
 
