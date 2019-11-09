@@ -20,7 +20,9 @@ from scipy import interpolate
 import os
 
 
-
+"""
+These are the changes to my flux data.
+"""
 
 def risco(a,m,M):
     '''
