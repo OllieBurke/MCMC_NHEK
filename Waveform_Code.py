@@ -19,6 +19,7 @@ from scipy.interpolate import InterpolatedUnivariateSpline
 from scipy import interpolate
 import os
 import warnings
+import matplotlib
 
 matplotlib.rc('xtick', labelsize=12) 
 matplotlib.rc('ytick', labelsize=12) 

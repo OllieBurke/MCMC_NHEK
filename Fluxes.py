@@ -18,6 +18,8 @@ from scipy import signal
 from scipy.interpolate import InterpolatedUnivariateSpline
 from scipy import interpolate
 import os
+import matplotlib
+
 matplotlib.rc('xtick', labelsize=12) 
 matplotlib.rc('ytick', labelsize=12) 
 
@@ -52,13 +54,21 @@ def Paths():
     Underneath are the hardcoded paths. You simply need to change these to the
     working directories of where the files a0.99999999, a0.998,a0.97. 
     """
-    path_a09995 = '/Users/Ollie/Nextcloud/Thesis/NHEK_Geometry/NHEK_Code/MCMC_NHEK/Flux_Data/a09995'
-    path_a4 = '/Users/Ollie/Nextcloud/Thesis/NHEK_Geometry/NHEK_Code/MCMC_NHEK/Flux_Data/a4' 
-    path_a5 = '/Users/Ollie/Nextcloud/Thesis/NHEK_Geometry/NHEK_Code/MCMC_NHEK/Flux_Data/a5' 
-    path_Ext = '/Users/Ollie/Nextcloud/Thesis/NHEK_Geometry/NHEK_Code/MCMC_NHEK/Flux_Data/a0.999999999'
-    path_a0998 = '/Users/Ollie/Nextcloud/Thesis/NHEK_Geometry/NHEK_Code/MCMC_NHEK/Flux_Data/a0.998'
-    path_a097 = '/Users/Ollie/Nextcloud/Thesis/NHEK_Geometry/NHEK_Code/MCMC_NHEK/Flux_Data/a0.97'
-    Home_Of_Code = '/Users/Ollie/Nextcloud/Thesis/NHEK_Geometry/NHEK_Code/MCMC_NHEK'
+#    path_a09995 = '/Users/Ollie/Nextcloud/Thesis/NHEK_Geometry/NHEK_Code/MCMC_NHEK/Flux_Data/a09995'
+#    path_a4 = '/Users/Ollie/Nextcloud/Thesis/NHEK_Geometry/NHEK_Code/MCMC_NHEK/Flux_Data/a4' 
+#    path_a5 = '/Users/Ollie/Nextcloud/Thesis/NHEK_Geometry/NHEK_Code/MCMC_NHEK/Flux_Data/a5' 
+#    path_Ext = '/Users/Ollie/Nextcloud/Thesis/NHEK_Geometry/NHEK_Code/MCMC_NHEK/Flux_Data/a0.999999999'
+#    path_a0998 = '/Users/Ollie/Nextcloud/Thesis/NHEK_Geometry/NHEK_Code/MCMC_NHEK/Flux_Data/a0.998'
+#    path_a097 = '/Users/Ollie/Nextcloud/Thesis/NHEK_Geometry/NHEK_Code/MCMC_NHEK/Flux_Data/a0.97'
+#    Home_Of_Code = '/Users/Ollie/Nextcloud/Thesis/NHEK_Geometry/NHEK_Code/MCMC_NHEK'
+    
+    path_a09995 = '/home/mattedwards/Ollie/MCMC_NHEK/a09995'
+    path_a4 = '/home/mattedwards/Ollie/MCMC_NHEK/a4' 
+    path_a5 = '/home/mattedwards/Ollie/MCMC_NHEK/a5' 
+    path_Ext = '/home/mattedwards/Ollie/MCMC_NHEK/a0.999999999'
+    path_a0998 = '/home/mattedwards/Ollie/MCMC_NHEK/a0.998'
+    path_a097 = '/home/mattedwards/Ollie/MCMC_NHEK/a0.97'
+    Home_Of_Code = '/home/mattedwards/Ollie/MCMC_NHEK'
     
     # Jonathan, put the location of each of your directories here:
 
