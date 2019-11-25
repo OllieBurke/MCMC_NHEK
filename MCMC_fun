@@ -1,0 +1,250 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Fri Nov 15 19:19:00 2019
+
+@author: Ollie
+"""
+
+def InnerProduct(sig1,sig2,freq_bin,delta_t,PSD):
+    """
+    This function is used to compute the inner product between two signals
+    sig1 and sig2. 
+    """
+    n_f = len(freq_bin) # Compute length of positive frequency components
+    N = len(sig1)       # Compute length of time series
+    fft_1 = np.delete(np.fft.rfftn(sig1),0)  # Compute dft of sig1
+    fft_2 = np.delete(np.fft.rfftn(sig2),0)  # Compute dft of sig2
+    # Below we return in the inner product of two signals sig1 and sig2.
+    return np.real(sum((fft_1) * np.conj(fft_2)/(PSD * N/(4*delta_t))))
+
+def Normalise(SNR,sig1,freq_bin,delta_t,PSD):
+    """
+    This function is used to normalise the amplitude of the signal so that we achieve the SNR we want.
+    """
+    Normalise_Factor = InnerProduct(sig1,sig1,freq_bin,delta_t,PSD)
+    return (SNR / np.sqrt(Normalise_Factor)) * sig1
+
+def zero_pad(data):
+    """
+    This function takes in a vector and zero pads it so it is a power of two.
+    """
+    N = len(data)
+    pow_2 = np.ceil(np.log2(N))
+    return np.pad(data,(0,int((2**pow_2)-N)),'constant')
+
+def PowerSpectralDensity(f):
+    """
+    Power Spectral Density for the LISA detector assuming it has been active for a year. 
+    I found an analytic version in one of Niel Cornish's paper which he submitted to the arXiv in
+    2018. I evaluate the PSD at the frequency bins found in the signal FFT.
+    
+    Am I definitely using the correct PSD? I am averaging over the sky so should I not be using
+    a slightly different PSD? EDIT: Corrected, I think... but need to ask Jonathan
+    where he got that (20/3) number (Dublin lecture notes). This is not obvious. 
+    
+    PSD obtained from: https://arxiv.org/pdf/1803.01944.pdf
+    
+    
+    """
+    sky_averaging_constant = (20/3) # Sky Averaged <--- I got this from Jonathan's notes but I need
+                                    # to check where he got it...
+    L = 2.5*10**9   # Length of LISA arm
+    f0 = 19.09*10**-3    
+
+    Poms = ((1.5*10**-11)**2)*(1 + ((2*10**-3)/f)**4)  # Optical Metrology Sensor
+    Pacc = (3*10**-15)**2*(1 + (4*10**-3/(10*f))**2)*(1 + (f/(8*10**-3))**4)  # Acceleration Noise
+    Sc = 9*10**(-45)*f**(-7/3)*np.exp(-f**0.171 + 292*f*np.sin(1020*f)) * (1 \
+                                            + np.tanh(1680*(0.00215 - f)))  
+
+    PSD = (sky_averaging_constant)* ((10/(3*L**2))*(Poms + (4*Pacc)/((2*np.pi*f))**4)*(1 + 0.6*(f/f0)**2) + Sc) # PSD
+    return PSD
+
+
+def llike(pdgrm, freq, n_t, delta_t, PSD):
+    '''
+    Computes log (Whittle) likelihood 
+    Assumption: Known PSD otherwise need additional term
+    Requires: Function called lisa_psd()
+    Inputs:
+    pdgrm: periodogram (MAKE SURE CORRECT SCALE)
+    freq: frequencies
+    n: length of time series
+    deltat: sampling interval
+    sigma: standard deviation of noise in time domain
+    '''
+     # The LISA PSD (function of frequency)
+    variances = (n_t / (4. * delta_t)) * PSD
+
+    #return(-0.5 * sum(np.log(psd) + pdgrm / variances))    
+    return(-0.5 * sum(pdgrm / variances))
+    
+def lprior(spin):
+    '''
+    Compute log prior of the parameter a
+    '''
+    if spin < 0 or spin > 1:
+        return -1e100
+    else:
+        return 0    
+    
+def lpost(pdgrm, freq, n, delta_t, spin, sigma):
+    '''
+    Compute log posterior
+    '''
+    return(lprior(spin) + llike(pdgrm, freq, n, delta_t, sigma))
+    
+def accept_rate(parameter):
+    '''
+    Compute acceptance rate for a specific parameter
+    Used to adapt the proposal variance in a MH sampler
+    Input: parameter (sequence of samples of a parameter)
+    '''
+    rejections = 0
+    for i in range(len(parameter) - 1):  # Count rejections
+        rejections = rejections + (parameter[i + 1] == parameter[i])
+    reject_rate = rejections / (len(parameter) - 1)  # Rejection rate
+    return(1 - reject_rate)  # Return acceptance rate
+
+def adapt_MH_proposal(i, parameter, log_sd_prop, 
+                      adapt_batch, target_accept):
+    '''
+    See Roberts + Rosenthal (2008) - Only works for Normal proposals
+    Adapt the proposal variance of a parameter in MH sampler
+    Uses accept_rate function
+    Inputs:
+    i: Iteration number
+    parameter: Parameter sequence
+    log_sd_prop: Current proposal log SD to be adapted
+    adapt_batch: Batch size to adapt
+    target_accept: Target acceptance rate (0.44 for 1 parameter)
+    '''
+    parameter = np.asarray(parameter)  # Convert list to array
+    batch = np.arange(i - adapt_batch, i)  # Index used to adapt proposal
+    adapt_delta = np.minimum(0.1, 1 / (i ** (1 / 3)))  # Scale adaptation
+    batch_parameter = parameter[batch]  # Subset of parameter sequence 
+    batch_accept = accept_rate(batch_parameter)  # Acceptance rate
+    log_sd_prop = log_sd_prop + ((batch_accept > target_accept) * 2 - 1) * adapt_delta # New proposal log SD
+    var_prop = np.exp(2 * log_sd_prop)  # Convert to proposal variance
+    return([log_sd_prop, var_prop])  # Return new proposal log SD and variance
+
+
+def MCMC_EMRI(data,time,freq_bin, SNR, delta_t, Ntotal, burnin, printerval,
+              spin_var_prop, adapt_batch, target_accept, PSD):
+    '''
+    MCMC
+    '''
+
+    n_t = len(data)   # Sample size
+    fs = 1 / delta_t  # Sampling rate
+    nyquist = fs / 2  # Nyquist frequency
+
+    
+    Nadaptive = burnin
+    
+    spin_log_sd_prop = np.log(spin_var_prop) / 2 
+
+    
+#            # Frequencies in Hz
+#    if n_t % 2: # Odd
+#        n_f = (n_t - 1) // 2  # Note // rather than / for integer division!
+#    else:  # Even
+#        n_f = n_t // 2 + 1        
+#    freq_bin= np.linspace(0, np.pi, n_f) * nyquist / np.pi
+#    freq_bin = np.delete(freq_bin,0)
+    
+    PSD = PowerSpectralDensity(freq_bin)
+
+    spin = []  # Set up empty list. This will eventually turn into a markov chain
+
+    
+    spin.append(0.1)  # Add the intial value of the parameter a
+
+
+    # Find signal given initial parameters
+    
+    signal_init_true = h(time,spin[0])
+    signal_init_pad = zero_pad(signal_init_true)  # propose first signal
+    signal_init = Normalise(SNR,signal_init_pad,freq_bin,delta_t,PSD) # Normalise the signal  SNR = 20
+    
+    signal_init_freq = np.delete(np.fft.rfftn(signal_init),0)
+    # Compute periodogram of noise (data - signal)
+    pdgrm = abs(data_freq - signal_init_freq)**2  # Same normalisation as R    
+    
+    # Initial value for log posterior - Here we will evaluate the likelihood and the prior.
+    lp_a = []
+
+    
+    lp_a.append(lpost(pdgrm, freq_bin, n_t, delta_t, spin[0], PSD))
+
+    
+    # Run MCMC
+    for i in range(1, Ntotal):
+        
+        if i % printerval == 0:
+            print("Iteration", i, "Prop_Var_a", spin_var_prop, 
+                  "Spin", spin[i - 1]) # This is printed for our information. We will be given the current value 
+                                        # of the chain and what the (tuned) proposal variance is for 
+                                        # optimum acceptance.
+                    
+            
+        #####
+        # Adaptation
+        #####
+        if ((i < Nadaptive) and (i > 0) and (i % adapt_batch == 0)):
+            """
+            Whilst in the early stages of proposing candidates (during burn-in), the proposal variance will be tuned
+            to ensure both efficiency of the algorithm (by accepting and rejecting at the perfect rate). The variance
+            will be tuned every single time we pass through 50 iterations of the chain.
+            """
+            spin_log_sd_prop, spin_var_prop = adapt_MH_proposal(i, spin, spin_log_sd_prop, adapt_batch, target_accept)
+
+ 
+            
+        #####
+        
+        # Previous values
+        spin_prev = spin[i - 1]   # Select the previous spin value
+
+        
+        lp_prev_a = lp_a[i - 1]
+
+        
+        
+
+        # Propose spin and do accept/reject step 
+        
+        # Below, with spin_prop, this is where we do the random walk metropilis algorithm. We start with the 
+        # spin_prev value and propose a new (random) value under some normal distribution with zero mean
+        # and (proposal) variance determined by the "Adaption" if statement given before.
+        
+        spin_prop = spin_prev + np.random.normal(0, np.sqrt(spin_var_prop), 1)[0] # Proposed spin
+        
+        signal_prop_a_true = h(time,spin_prop)  # New proposed signal
+        signal_prop_a = zero_pad(signal_prop_a_true)
+        signal_prop_a = Normalise(SNR,signal_prop_a,freq_bin,delta_t,PSD) # Normalise the proposed signal
+        signal_prop_a_freq = np.delete(np.fft.rfftn(signal_prop_a),0)
+        
+        pdgrm_prop = abs(data_freq - signal_prop_a_freq)**2 # Calculate the periodigram with new signal
+        lp_prop_a = lpost(pdgrm_prop, freq_bin, n_t, delta_t, spin_prop, PSD)
+        # Calculate the new log posterior using the new proposed signal
+        
+        if accept_reject(lp_prop_a, lp_prev_a) == 1:  # Accept
+            """
+            Here we use the function above accept_reject(...) to determine whether we should accept or reject the new
+            proposed value of a. 
+            """
+            spin.append(spin_prop)  # Update the markov chain with the new spin value           
+            lp_a.append(lp_prop_a)      # Update the posterior with the old posterior
+        else:  # Reject
+            spin.append(spin_prev)  # Update the markov chain with the old spin value (which was accepted previously)                 
+            lp_a.append(lp_prev_a)      # update the log posterior with the old log posterior
+        
+        
+        
+        
+    full_chain_a = spin
+    chain_a = full_chain_a[burnin:] # Here we remove the earlier values of the chain and only keep values after we are 
+                                # sure the chain converges
+        
+    return full_chain_a,chain_a
