@@ -19,6 +19,11 @@ from scipy.interpolate import InterpolatedUnivariateSpline
 from scipy import interpolate
 import os
 import warnings
+
+matplotlib.rc('xtick', labelsize=12) 
+matplotlib.rc('ytick', labelsize=12) 
+
+matplotlib.rcParams.update({'font.size': 14})
 warnings.filterwarnings('ignore')  # Because of stiff differential equation.
 
 def units():
@@ -79,29 +84,8 @@ def R(a,mu,M,rinit):
 
     r_isco = risco(a,1,1)[0] # Calculate the ISCO at a spin of a
     
-    
-# =============================================================================
-#   The below should be used when we run the algorithm properly. Reason: It
-#   Calculates the sample rate at which we can resolve the highest frequency of
-#   signal. For the sake of pace, we choose a smaller stepsize.
-# =============================================================================
-    
-#    #freq_max = (11/(2*np.pi)) * ((r_isco**(3/2)+a)**-1)/4.97  # Highest frequency, units of seconds. We use 11 harmonics remember.
-#    freq_max = ((11/(2*np.pi)) * (2)**-1)/(1e6 * Msun_sec)  # I already know the highest frequency since we are on a circular orbit.
-                                                                # As such, I can decipher the frequency at the ISCO (units of Hz)
-    
-# REMEMBER: f_{m} = (1/2pi) * m * orbital velocity. m = 11 is the largest frequency... although in power it is small it is still present.    
-    
 
-#    #    print('largest frequency is',freq_max)
-#    fs = 2*freq_max +0.001      # set sample rate > 2*f_max so we can resolve highest frequency (we are oversampling)
-#    
-#    delta_t = ((1e-5)/(1e6*Msun_sec) * (1/fs))    # Work in radiation reaction units. This itself is dimensionless.
-#    # However, I must multiply by M/eta to find the value in seconds.
-#    #    delta_t = 0.001232  # Test for quickness.
-#    
-#    delta_t_sec = delta_t * 1e6 * Msun_sec / eta
-#    #rinit = 6.714          # Initial value 6.714M (boundary condition) (year long at a = 1-10**-9)
+    #rinit = 6.714          # Initial value 6.714M (boundary condition) (year long at a = 1-10**-9)
     
     eta = mu/M
     
@@ -111,9 +95,8 @@ def R(a,mu,M,rinit):
 
     r = ode(diffeqn, jac = None).set_integrator('lsoda', method='bdf')
     r.set_initial_value(rinit,t0).set_f_params(a,EpsFun,r_isco,eta)
-    one_day = 86400
-    
-    t_final = one_day # integrate until 10 M/eta has been achieved.
+#    one_day = 86400
+
     t_final = 2*np.pi*1e7
     
     r_insp = []
@@ -165,7 +148,7 @@ def PowerSpectralDensity(f):
                                             + np.tanh(1680*(0.00215 - f)))  
 
     PSD = (sky_averaging_constant)* ((10/(3*L**2))*(Poms + (4*Pacc)/((2*np.pi*f))**4)*(1 + 0.6*(f/f0)**2) + Sc) # PSD
-#    PSD = (20/3) * 1e-40   # Sky averaged white noise 
+
 
     return PSD
     
@@ -236,6 +219,32 @@ def zero_pad(data):
     pow_2 = np.ceil(np.log2(N))
     return np.pad(data,(0,int((2**pow_2)-N)),'constant')
 
+def FFT(signal):
+    return np.delete(np.fft.rfftn(signal),0)
+
+def Inner_Prod(signal1,signal2,delta_t,freq_bin,PSD):
+    """ 
+    Computes inner product of signal
+    IMPORTANT: here we use the DISCRETE fourier transform rather than the 
+    continuous fourier transform. 
+    See 
+    
+    https://www.rdocumentation.org/packages/bspec/versions/1.5/topics/snr
+    
+    for the formula
+    """
+    
+    n_f = len(freq_bin)   # length of signal in frequency doamin
+    n_t = len(signal1)    # length of signal in the time domain
+
+    
+    FFT_Sig1 = FFT(signal1)
+    FFT_Sig2 = FFT(signal2)
+    
+    Inner_Product = 4*delta_t*sum(np.real((FFT_Sig1 * np.conjugate(FFT_Sig2))) / (n_t * PSD))
+    
+    return Inner_Product
+
 def All_Modes_GW_Waveform(a,mu,M,phi,D,rinit):
     '''
     This function creates the un normed gravitational waveform. 
@@ -267,26 +276,7 @@ def All_Modes_GW_Waveform(a,mu,M,phi,D,rinit):
     return GW_pad,r,new_t,Interpolating_Eps_Inf_Functions,delta_t,last_index
 
 
-def Inner_Prod(signal1,signal2,delta_t,freq_bin,PSD):
-    """ 
-    Computes inner product of signal
-    IMPORTANT: here we use the DISCRETE fourier transform rather than the 
-    continuous fourier transform. 
-    See 
-    
-    https://www.rdocumentation.org/packages/bspec/versions/1.5/topics/snr
-    
-    for the formula
-    """
-    
-    n_f = len(freq_bin)   # length of signal in frequency doamin
-    n_t = len(signal1)    # length of signal in the time domain
-    FFT_Sig1 =  np.fft.fft(signal1)[0:n_f]  # Calculate fft
-    FFT_Sig2 = np.fft.fft(signal2)[0:n_f]   # Calculate fft
-    
-    Inner_Product = 4*delta_t*sum(np.real((FFT_Sig1 * np.conjugate(FFT_Sig2))) / (n_t * PSD))
-    
-    return Inner_Product
+
 
 def Un_Normed(a,mu,M,phi,D,rinit):
     '''
@@ -305,8 +295,7 @@ def Un_Normed(a,mu,M,phi,D,rinit):
     else:  # Even
         n_f = n // 2 + 1        
     freq_bin = np.linspace(0, np.pi, n_f) * nyquist / np.pi # In units of Hz. 
-    
-    FFT_GW = np.fft.fft(GW_pad)[0:n_f]  # Find FFT. ONLY using the positive frequencies.
+    freq_bin = np.delete(freq_bin,0)        # Remove the zeroth frequency bin
 
 
     PSD = PowerSpectralDensity(freq_bin)  # Compute PSD
@@ -319,34 +308,94 @@ def Un_Normed(a,mu,M,phi,D,rinit):
 def GW_Normed(SNR,a,mu,M,phi,D,rinit):
     '''
     Generates the normalised signal for SNR = whatever I want. 
-    '''
-         
-    SNR = 20
-    a = 1-10**-9
-    mu = 10
-    M = 1e6
-    phi = 0
-    D = 1
-    rinit = 3
-    
+    '''  
+#    SNR = 20
+#    a = 1-10**-9
+#    mu = 10
+#    M = 1e7
+#    phi = 0
+#    D = 1
+#    rinit = 5.379  # 1 year with eta = 10^{-6}, M = 1e7 <-- better for NHEK.
+#    print('initial radii',rinit)
     Normalise,GW_pad,freq_bin,PSD,r,new_t,Interpolating_Eps_Inf_Functions,delta_t,last_index = Un_Normed(a,mu,M,phi,D,rinit)
     # Calculate the Normalising factor
     Distance_sec,Msun_sec = units()  # Extract helpful units
     # Read in distance in seconds.
     Distance = (((SNR/np.sqrt(Normalise))**-1)) / (Distance_sec)
     
-    print(Distance)
-    
     # Calculate the distance in Gpc
     
-    GW_check = (1/(Distance*Distance_sec)) * GW_pad
+#    GW_check = (1/(Distance*Distance_sec)) * GW_pad
     
     GW_pad *= (SNR / np.sqrt(Normalise))  # The signal has SNR for what I specified.
+    max_index = np.argmax(GW_pad)
+    eta = mu/M
+#    plt.plot(new_t[0:last_index]*eta,GW_pad[0:last_index],'darkviolet')
+#    plt.ylabel(r'$h$')
+#    plt.xlabel(r'$\tilde{t}\times\eta$')
+#    plt.title('Near-Extremal Waveform')
+    
+#    print('length of signal is',new_t[last_index]/(31536000))
     
 
-    return GW_pad,new_t,delta_t,freq_bin,PSD,Normalise,last_index
+    return GW_pad,new_t,delta_t,freq_bin,PSD,Normalise,last_index,max_index
         
     
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 def Overlap(a,b,delta_t,freq_bin,PSD):
     """
     This function computes overlaps between to signals a and b
@@ -355,568 +404,298 @@ def Overlap(a,b,delta_t,freq_bin,PSD):
     denominator = np.sqrt((Inner_Prod(a,a,delta_t,freq_bin,PSD) * Inner_Prod(b,b,delta_t,freq_bin,PSD)))
     overlap = numerator / denominator
     return overlap
-        
-def Fisher_a(a,rinit):
-        
-    """
-    1. For a large number of the spins, the overlaps are not symmetric.
-    2. The uncertainties are completely ridiculous.
-    3. The fisher matrix probably assumes that h follows the same parametrization
-        it may not in this case. The Fisher matrix also knows nothing about the 
-        upper bound on the spin parameter. 
-    4. As I increase the spin, there is no obvious behaviour in how the
-        uncertainty changes. For example, fixing r_init and running the code
-        for spins 1-10^-i for i in (3,15) does not mean the uncertainty
-        drops... I would have expeceted that the uncertainty would drop due to 
-        the extra cycles gained since the ISCO --> horizon.
-    5. The derivatives look extremely strange. Not stable at all as I 
-        vary the perturbing parameter. Perhaps need to look for a more
-        accurate way of computing the derivative. Also, very hard to take the
-        derivative of a waveform when there exists an upper bound on the spin. 
-        EG: Test spin a = 1-10^-12... then I can only use a perturbing value
-        10^-14 and above...
-    6. I personally believe it has something to do with the waveform model.
-        That is... the computation of the fluxes. Jon thinks that there
-        is something wrong with the way I'm computing the Fisher matrix...
-        I do NOT believe it has anything to do with the Fisher matrix... but, 
-        then again, I did try and convince him that I had discovered complex (valued)
-        orbits in the Kerr spacetime.
-    7. Limit of high SNR, overlaps should behave like 1 - 1/SNR**2 . They sometimes
-        do and they sometimes don't.
-        
-    EDIT: New thoughts
-    
-    1. Question (posed by Jon): Are we able to identify near-extremal black holes
-       which have a spin parameter greater than 0.998? 
-    2. If, my waveform model is terrible (which I am 0.9975%) sure is the case, 
-       then perhaps I could interpolate yet more flux data which I have been generating.
-       Jon thinks that this should not be the problem though... I really hope he is right.
-    3. Perhaps there is a rouge factor of the mass ratio floating around? 
-    4. Units? Probabiy. I have tried to be as careful as possible.
-    5. Maybe because GW(a1-delta_a) and GW(a1 + delta_a) have different 
-       normalising constants which will cause problems? Don't know why this would
-       be though.
-    6. Work on a log scale?
-    7. There is a massive spike right at the end of the derivative. Why?
-    
-    8. The reason I got "reasonable" fisher matrix estimates last time was 
-        because I was only differentiating the angular frequency with
-        respect to a.
-        
-    9. OK, my results seem fine when I am far from the ISCO. It is only
-        when I near in on the ISCO there is a problem. 
-    """
-    
-
-
-    
-    print('Spin is ',a)
-    mu = 10      # Secondary mass
-    M = 1e6      # Primary mass
-    eta = mu/M   # Mass ratio
-    phi = 0      # Initial phase
-    D = 1        # Distance (will) be chosen later to give SNR specified
-    SNR = 20     # SNR of signal
-    deriv_perturb = 1e-10   # Perturbing value to compute derivative
-    # =============================================================================
-    #     Calcaulte derivative of waveform with respect to a
-    # =============================================================================
-    a1 = a + deriv_perturb  
-    a2 = a - deriv_perturb
-    
-    GW_pad1,new_t,delta_t,freq_bin,PSD,Normalise,last_index1 = GW_Normed(SNR,a1,mu,M,phi,D,rinit)
-    GW_pad2,new_t,delta_t,freq_bin,PSD,Normalise,last_index2 = GW_Normed(SNR,a2,mu,M,phi,D,rinit)
-    
-    GW_pad1 = zero_pad(GW_pad1)
-    diff = ((GW_pad1 - GW_pad2))/(2*deriv_perturb)
-    deriv = high_order_deriv(SNR,a,mu,M,phi,D,rinit)  # Here we use a higher 
-                                                      # order derivative
-    # =============================================================================
-    #       Plot the derivative    
-    # =============================================================================
-    plt.plot(new_t,np.abs(diff)**2)
-    plt.xlabel(r'$\tilde{t}/\eta$')
-    plt.ylabel(r'$\tilde{r}$')
-    plt.title(r'Derivative of Waveform wrt $a$')
-    plt.show()
-    plt.clf()
-    
-#    plt.plot(new_t,deriv)
-#    plt.xlabel(r'$\tilde{t}/\eta$')
-#    plt.ylabel(r'$\tilde{r}$')
-#    plt.title(r'Derivative of Waveform wrt $a$')
-#    plt.show()
-#    plt.clf()
-#    
-    # Compute 1-sigma deviation in likelihood from MLE.
-    uncertainty_a = np.sqrt(Inner_Prod(diff,diff,delta_t,freq_bin,PSD)**-1)   
-    # =============================================================================
-    #     Below we compute overlaps of signals where we perturb the spin by
-    #     the uncertainty \Delta a. The results should be symmetric and approximately
-    #     overlap = 1 - 1/\rho^{2}
-    # =============================================================================
-    
-    a1 = a 
-    a2 = a - uncertainty_a
-    a3 = a + uncertainty_a
      
-    GW_pad1,new_t,delta_t,freq_bin,PSD,Normalise,last_index = GW_Normed(SNR,a1,mu,M,phi,D,rinit)
-    GW_pad2,new_t,delta_t,freq_bin,PSD,Normalise,last_index = GW_Normed(SNR,a2,mu,M,phi,D,rinit)
-    GW_pad3,new_t,delta_t,freq_bin,PSD,Normalise,last_index = GW_Normed(SNR,a3,mu,M,phi,D,rinit)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# =============================================================================
+# SNR Calculations
+# =============================================================================
+def SNR_NHEK(SNR,a,mu,M,phi,D,rinit):
+    GW_pad,new_t,delta_t,freq_bin,PSD,Normalise,last_index = GW_Normed(SNR,a,mu,M,phi,D,rinit)
     
+    max_index = np.argmax(GW_pad)
+    GW_NHEK = GW_pad[max_index:]
     
-    overlap_plus_minus = Overlap(GW_pad2,GW_pad3,delta_t,freq_bin,PSD)
-    overlap_minus = Overlap(GW_pad1,GW_pad2,delta_t,freq_bin,PSD)
-    overlap_plus = Overlap(GW_pad1,GW_pad3,delta_t,freq_bin,PSD)
-    
-    # =============================================================================
-    #     Output
-    # =============================================================================
-    print('spin is',a)
-    print('Uncertainty in is',uncertainty_a) 
-    print('The overlap between the two waveforms (a,a-delta_a) using fisher result is', overlap_minus)
-    print('The overlap between the two waveforms (a,a+delta_a) using fisher result is', overlap_plus)
-    print('The overlap between the two waveforms (a-delta_a,a+delta_a) using fisher result is', overlap_plus_minus)
-    print('\n We should be getting an overlap of ',(1 - SNR**-2 + (1/4)*SNR**-4))
+    n = len(GW_NHEK)   # Sample size in the time domain
+    fs = 1 / delta_t  # Sampling rate (measured in 1/seconds)
+    nyquist = fs / 2  # Nyquist frequency 
         
+    if n % 2:  # Odd
+        n_f = (n - 1) // 2  # Note // rather than / for integer division!
+    else:  # Even
+        n_f = n // 2 + 1        
+    freq_bin = np.linspace(0, np.pi, n_f) * nyquist / np.pi # In units of Hz. 
+    freq_NHEK = np.delete(freq_bin,0)        # Remove the zeroth frequency bin
+    PSD = PowerSpectralDensity(freq_NHEK)
     
+    SNR2 = Inner_Prod(GW_NHEK,GW_NHEK,delta_t,freq_NHEK,PSD)
+# =============================================================================
+# Cool plots
+# =============================================================================
     
+def R_plot():
+    eta = 1e-5
     
+    r_a9,t_a9,delta_t = R(1-10**-9,10,1e6,3)
+    r_a6,t_a6,delta_t = R(1-10**-6,10,1e6,3)
+    r_a3,t_a3,delta_t = R(1-10**-3,10,1e6,3)
     
+    plt.plot(t_a9*1e-5,r_a9,label = r'$a=1-10^{-9}$')
+    plt.plot(t_a6*1e-5,r_a6,label = r'$a=1-10^{-6}$')
+    plt.plot(t_a3*1e-5,r_a3,label = r'$a=1-10^{-3}$')
 
-
-def Overlap_GWs(delta_a):
-    GW_pad,new_t,delta_t,freq_bin,PSD,Normalise,last_index = GW_Normed(20,0.998+delta_a,10,1e6,0,1,3)
-    GW_thorne,new_t,delta_t,freq_bin,PSD,Normalise,last_index = GW_Normed(20,0.998,10,1e6,0,1,3)  
-
-    overlap = Overlap(GW_pad,GW_thorne,delta_t,freq_bin,PSD)
-    print(overlap)
-    print('Overlap of spin a = %s and a = 1-10**-9 is %s'%(a,overlap))
-    
-def high_order_deriv(SNR,a,mu,M,phi,D,rinit):
-    """
-    This is a more accurate way to compute the derivative (although slower).
-    I am getting the same derivative as I was when using the formula for
-    symmetric differences. I get the same Fisher matrix result using this formula.
-    """
-    deriv_perturb = 1e-10
-    
-    GW_pad_plus2,new_t,delta_t,freq_bin,PSD,Normalise,last_index1 = GW_Normed(SNR,a+2*deriv_perturb,mu,M,phi,D,rinit)
-    GW_pad_plus1,new_t,delta_t,freq_bin,PSD,Normalise,last_index1 = GW_Normed(SNR,a+deriv_perturb,mu,M,phi,D,rinit)    
-   
-    GW_pad_minus1,new_t,delta_t,freq_bin,PSD,Normalise,last_index1 = GW_Normed(SNR,a-deriv_perturb,mu,M,phi,D,rinit)    
-    GW_pad_minus2,new_t,delta_t,freq_bin,PSD,Normalise,last_index1 = GW_Normed(SNR,a-2*deriv_perturb,mu,M,phi,D,rinit)
-    
-    deriv = ((-GW_pad_plus2 + 8*GW_pad_plus1 - 8*GW_pad_minus1 + GW_pad_minus2))/(12*deriv_perturb)
-    return deriv
-
-
-
-def Fisher_mu(a,rinit):
-    """
-    Here we compute a 1 dimensional fisher matrix on the secondary mass mu.
-    We highlight here that the results we obtain seem sensible and are verified
-    using the formula for the overlaps (1 - 1/\rho^2). This highlights to me
-    that the problem with the waveform model is when we are changing the spin
-    which directly influences the fluxes. As a result, the spin is screwing us.
-    
-    The details below are essentially identical to the function 
-    Fisher_a(a,rinit). So, it is a waste of time commenting it. See the function
-    above.
-    """   
-
-    
-    print('Spin is ',a)
-    mu = 10
-    M = 1e6
-    eta = mu/M
-    phi = 0
-    D = 1
-    SNR = 20
-    deriv_perturb = 1e-8
-
-    mu1 = mu + deriv_perturb
-    mu2 = mu - deriv_perturb
-    
-    GW_pad1,new_t,delta_t,freq_bin,PSD,Normalise,last_index1 = GW_Normed(SNR,a,mu1,M,phi,D,rinit)
-    GW_pad2,new_t,delta_t,freq_bin,PSD,Normalise,last_index2 = GW_Normed(SNR,a,mu2,M,phi,D,rinit)
-    
-    
-    diff = ((GW_pad1 - GW_pad2))/(2*deriv_perturb)
-    
-    plt.plot(new_t,diff)
-    plt.xlabel(r'$\tilde{t}/\eta$')
+    plt.xlabel(r'$\tilde{t}\times \eta$')
     plt.ylabel(r'$\tilde{r}$')
-    plt.title(r'Derivative of Waveform wrt $a$')
-    plt.show()
-    plt.clf()
+    plt.title('Radial Evolution')        
+    plt.legend(prop = {'size':18})
     
-    uncertainty_mu = np.sqrt(Inner_Prod(diff,diff,delta_t,freq_bin,PSD)**-1)   
+def f(r,a):
+    return -1*(64/5)*((r)**(3/2) + a)**(-10/3)*  ((1 - (3/r) + 2*a*((1/r)**(3/2)))**(3/2))/ ((1-(6/r) + 8*a*(1/r)**(3/2) - 3*(a/r)**2)*((1/r)**2))
+
+def inspiral(a):
+    r_isco = risco(a,1,1)[0]
+    EpsFun = Extrapolate(a)
     
-    print(uncertainty_mu)
+    drdt = []
+    r0 = np.arange(r_isco+0.00001,8,0.00001)
+    return EpsFun(r0)*f(r0,a),r0
     
-    mu1 = mu 
-    mu2 = mu - uncertainty_mu
-    mu3 = mu + uncertainty_mu
-    GW_pad1,new_t,delta_t,freq_bin,PSD,Normalise,last_index = GW_Normed(SNR,a,mu1,M,phi,D,rinit)
-    GW_pad2,new_t,delta_t,freq_bin,PSD,Normalise,last_index = GW_Normed(SNR,a,mu2,M,phi,D,rinit)
-    GW_pad3,new_t,delta_t,freq_bin,PSD,Normalise,last_index = GW_Normed(SNR,a,mu3,M,phi,D,rinit)
+def plot_deriv():
+    #    drdt,r0 = inspiral(1-10**-13)
+    #    drdt_13 = drdt
+    #    r0_13 = r0
+    #    drdt,r0 = inspiral(1-10**-12)
+    #    drdt_12 = drdt
+    #    r0_12 = r0
+    #    drdt,r0 = inspiral(1-10**-11)
+    #    drdt_11 = drdt
+    #    r0_11 = r0
+    #    drdt,r0 = inspiral(1-10**-10)
+    #    drdt_10 = drdt
+    #    r0_10 = r0
+    #    drdt,r0 = inspiral(1-10**-9)
+    #    drdt_9 = drdt
+    #    r0_9 = r0
+    drdt,r0 = inspiral(1-10**-8)
+    drdt_8 = drdt
+    r0_8 = r0
+    drdt,r0 = inspiral(1-10**-7)
+    drdt_7 = drdt
+    r0_7 = r0
+    drdt,r0 = inspiral(1-10**-6)
+    drdt_6 = drdt
+    r0_6 = r0
+    drdt,r0 = inspiral(1-10**-5)
+    drdt_5 = drdt
+    r0_5 = r0
+    drdt,r0 = inspiral(1-10**-4)
+    drdt_4 = drdt
+    r0_4 = r0
+    drdt,r0 = inspiral(1-10**-3)
+    drdt_3 = drdt
+    r0_3 = r0
+    drdt,r0 = inspiral(0.998)
+    drdt_2 = drdt
+    r0_2 = r0
+    drdt,r0 = inspiral(0.98)
+    drdt_1 = drdt
+    r0_1 = r0
     
+    #    plt.plot(r0_13,drdt_13)
+    #    plt.plot(r0_12,drdt_12)
+    #    plt.plot(r0_11,drdt_11)
+    #    plt.plot(r0_10,drdt_10)
+    #    plt.plot(r0_9,drdt_9)
+    #    plt.plot(r0_8,drdt_8)
+    #    plt.plot(r0_7,drdt_7)
+    plt.plot(r0_8,drdt_8,label = r'$a = 1-10^{-8}$')    
+    plt.plot(r0_7,drdt_7,label = r'$a = 1-10^{-7}$')
+    plt.plot(r0_6,drdt_6,label = r'$a =1-10^{-6}$')
+    plt.plot(r0_5,drdt_5,label = r'$a =1-10^{-5}$')
+    plt.plot(r0_4,drdt_4,label = r'$a =1-10^{-4}$')
+    plt.plot(r0_3,drdt_3,label = r'$a=1-10^{-3}$')
+
+    plt.xlim([0.8,3.5])
+    plt.ylim([-0.8,0]) 
+    plt.title('Radial Derivative', size = 18)
+    plt.xlabel(r'$\tilde{r}$',size=18)
+    plt.ylabel(r'$d\tilde{r}/d\tilde{t}$',size = 18)
+    plt.legend(prop = {'size': 18})
     
-    plt.plot(new_t,GW_pad1)
-    plt.xlabel(r'$\tilde{t}/\eta$')
-    plt.ylabel(r'$\tilde{r}$')
-    plt.title(r'Waveform with spin $a$')
-    plt.show()
-    plt.clf()
-    
-    overlap_plus_minus = Overlap(GW_pad2,GW_pad3,delta_t,freq_bin,PSD)
-    overlap_minus = Overlap(GW_pad1,GW_pad2,delta_t,freq_bin,PSD)
-    overlap_plus = Overlap(GW_pad1,GW_pad3,delta_t,freq_bin,PSD)
-    
-    print('secondary mass is',mu)
-    print('Uncertainty in is',uncertainty_mu) 
-    print('The overlap between the two waveforms (a,a-delta_a) using fisher result is', overlap_minus)
-    print('The overlap between the two waveforms (a,a+delta_a) using fisher result is', overlap_plus)
-    print('The overlap between the two waveforms (a-delta_a,a+delta_a) using fisher result is', overlap_plus_minus)
-    print('\n We should be getting an overlap of ',(1 - SNR**-2 + (1/4)*SNR**-4))
-    
-def Fisher_M():
-    """
-    Again, I am getting very sensible results for uncertainty of M which leads
-    me to believe that I am experiencing a problem with with the spin parameter.
-    
-    No need to comment this since it is much the same as the other functions
-    above.
-    """
-        
-    
-    a = 0.998
-    rinit = 3
+def Time_Until_ISCO(a):
     Distance_sec,Msun_sec = units()
+    EpsFun = Extrapolate(a)
+    #r_true,t_true = R(a,h)
+    r_isco = risco(a,1,1)[0]
+#    r_horiz = 1 + np.sqrt(1-a**2)
+    r = np.arange(1.473,r_isco,-0.00001)
+
+    N_Cor = (1/ EpsFun(r)) * (1 + a/(r**(3/2)))**(5/3) * (1 - 6/r + 8*a/(r**(3/2)) - 3*(a/r)**2) * ((1 - 3/r + 2*a/(r**(3/2)))**(-3/2))
+
+    limits = np.sqrt(Omega(r,a,0))
+
+    T_Cor = (8/3) * Omega(r[0],a,1) * simps(N_Cor/ Omega(r,a,5/2) ,limits) # looks ok.
+
+    T = ((5/256)*(1e6 * Msun_sec/1e-5) / (Omega(r[0],a,1))) * T_Cor
     
-    print('Spin is ',a)
-    mu = 10
-    M = 1e6
-    eta = mu/M
-    phi = 0
-    D = 1
-    SNR = 20
-    deriv_perturb = 1e-2
+    t_rad_reaction = T /60/60/24
+
+
+    return t_rad_reaction
     
-    M1 = M + deriv_perturb
-    M2 = M - deriv_perturb
+def No_Orbits(a):
+    EpsFun = Extrapolate(a)
+    r_isco = risco(a,1,1)[0]
+    r = np.arange(1.473,r_isco,-0.0001)
+    #r = np.arange(6.714,1.473,-0.0001)
+
+    N_Cor = (1/ EpsFun(r)) * (1 + a/(r**(3/2)))**(5/3) * (1 - 6/r + 8*a/(r**(3/2)) - 3*(a/r)**2) * ((1 - 3/r + 2*a/(r**(3/2)))**(-3/2))
+
+    limits = np.sqrt(Omega(r,a,0))
     
-    GW_pad1,new_t,delta_t,freq_bin,PSD,Normalise,last_index1 = GW_Normed(SNR,a,mu1,M1,phi,D,rinit)
-    GW_pad2,new_t,delta_t,freq_bin,PSD,Normalise,last_index2 = GW_Normed(SNR,a,mu2,M2,phi,D,rinit)
+    N_Orb_Cor = (5/3) * Omega(r[0],a,-1/2) *simps(N_Cor/Omega(r,a,1),limits)
+    N_orbits = ((1/(64*np.pi)) * (1e5) / Omega(r[0],a,-1/2)) * N_Orb_Cor
+    return N_orbits
+
+def Info_NHEK():
+    a_vec = []
+    N_vec = []
+    t_rad_vec = []
     
-    
-    diff = ((GW_pad1 - GW_pad2))/(2*deriv_perturb)
-    
-    plt.plot(new_t,diff)
-    plt.xlabel(r'$\tilde{t}/\eta$')
-    plt.ylabel(r'$\tilde{r}$')
-    plt.title(r'Derivative of Waveform wrt $a$')
-    plt.show()
-    plt.clf()
-    
-    uncertainty_M = np.sqrt(Inner_Prod(diff,diff,delta_t,freq_bin,PSD)**-1)   
-    
-    print(uncertainty_M)
-    
-    M1 = M
-    M2 = M - uncertainty_M
-    M3 = M + uncertainty_M
-    GW_pad1,new_t,delta_t,freq_bin,PSD,Normalise,last_index = GW_Normed(SNR,a,mu,M1,phi,D,rinit)
-    GW_pad2,new_t,delta_t,freq_bin,PSD,Normalise,last_index = GW_Normed(SNR,a,mu,M2,phi,D,rinit)
-    GW_pad3,new_t,delta_t,freq_bin,PSD,Normalise,last_index = GW_Normed(SNR,a,mu,M3,phi,D,rinit)
-    
-    
-    overlap_plus_minus = Overlap(GW_pad2,GW_pad3,delta_t,freq_bin,PSD)
-    overlap_minus = Overlap(GW_pad1,GW_pad2,delta_t,freq_bin,PSD)
-    overlap_plus = Overlap(GW_pad1,GW_pad3,delta_t,freq_bin,PSD)
-    
-    print('secondary mass is',M)
-    print('Uncertainty in is',uncertainty_M) 
-    print('The overlap between the two waveforms (a,a-delta_a) using fisher result is', overlap_minus)
-    print('The overlap between the two waveforms (a,a+delta_a) using fisher result is', overlap_plus)
-    print('The overlap between the two waveforms (a-delta_a,a+delta_a) using fisher result is', overlap_plus_minus)
-    print('\n We should be getting an overlap of ',(1 - SNR**-2 + (1/4)*SNR**-4))
-
-#def Fisher_D(a,rinit):
-
-
-a = 1-10**-6
-rinit = 3    
-Distance_sec,Msun_sec = units()
-
-print('Spin is ',a)
-mu = 10
-M = 1e6
-eta = mu/M
-phi = 0
-D = 1
-SNR = 20
-
-Normalise,signal,freq_bin,PSD,r,new_t,Interpolating_Eps_Inf_Functions,delta_t,last_index = Un_Normed(a,mu,M,phi,D,rinit)
-
-distance = (((SNR/np.sqrt(Normalise))**-1)) / (Distance_sec)
-
-print(distance)
-
-# Calculate the distance in Gpc
-
-GW_check = (1/(distance*Distance_sec)) * signal
-
-diff = -(1/(distance*Distance_sec)**2) * signal 
-
-
-plt.plot(new_t,diff)
-plt.xlabel(r'$\tilde{t}/\eta$')
-plt.ylabel(r'$\tilde{r}$')
-plt.title(r'Derivative of Waveform wrt $a$')
-plt.show()
-plt.clf()
-
-uncertainty_D_Gpc = np.sqrt(Inner_Prod(diff,diff,delta_t,freq_bin,PSD)**-1)/Distance_sec   
-
-print(uncertainty_D_Gpc)
-
-d1 = distance
-d2 = distance - uncertainty_D_Gpc
-d3 = distance + uncertainty_D_Gpc
-
-GW_1 = (1/(d1*Distance_sec)) * signal
-GW_2 = (1/(d2*Distance_sec)) * signal
-GW_3 = (1/(d3*Distance_sec)) * signal
-
-
-overlap_plus_minus = Overlap(GW_2,GW_3,delta_t,freq_bin,PSD)
-overlap_minus = Overlap(GW_1,GW_2,delta_t,freq_bin,PSD)
-overlap_plus = Overlap(GW_1,GW_3,delta_t,freq_bin,PSD)
-
-print('Distance in Gpc ',distance)
-print('Uncertainty in is',uncertainty_D_Gpc) 
-print('The overlap between the two waveforms (a,a-delta_a) using fisher result is', overlap_minus)
-print('The overlap between the two waveforms (a,a+delta_a) using fisher result is', overlap_plus)
-print('The overlap between the two waveforms (a-delta_a,a+delta_a) using fisher result is', overlap_plus_minus)
-print('\n We should be getting an overlap of ',(1 - SNR**-2 + (1/4)*SNR**-4))
-
-    
-    
-def Fisher_a_tukey(a,rinit):
+    for i in range(3,12):
+        print('Spin parameter 1-10^- %s'%(i))
+        a = 1-10**(-i)
+        a_vec.append(i)
         
-    """
-    To test whether the problem could be coming from a hard cutoff I will try
-    and window the signal. Perhaps the extra certainty could come from 
-    extreme spectral leakage since we are windowing with a rectangular function    
-    """
-
-    a = 0.998  # Spin of choice <-- I have exact flux data for this.
-    rinit = 3  # initial radii
-    Distance_sec,Msun_sec = units()
-    
-# =============================================================================
-#     Parameters of the system.
-# =============================================================================
-    mu = 10
-    M = 1e6
-    eta = mu/M
-    phi = 0
-    D = 1
-    SNR = 20
-    deriv_perturb = 1e-10
-# =============================================================================
-# Calculate derivative    
-# =============================================================================
-    a1 = a + deriv_perturb
-    a2 = a - deriv_perturb
-    
-    Interpolating_Eps_Inf_Functions1,Interpolating_Eps_Inf_998_Functions = ExtrapolateInf_All(a1)[0:2]
-    Interpolating_Eps_Inf_Functions2,Interpolating_Eps_Inf_998_Functions = ExtrapolateInf_All(a2)[0:2]
-    
-    GW_pad1,new_t,delta_t,freq_bin,PSD,Normalise1,last_index1 = GW_Normed(SNR,a1,mu,M,phi,D,rinit)
-    GW_pad2,new_t,delta_t,freq_bin,PSD,Normalise2,last_index2 = GW_Normed(SNR,a2,mu,M,phi,D,rinit)
-    
-    r_isco_a1 = risco(a1,1,1)[0]
-    r_isco_a2 = risco(a2,1,1)[0]
-
-# =============================================================================
-# both signal_end_1 and signal_end_2 will be windowed shortly. I have chosen
-# the value of r_isco since this will specify the final frequency of the 
-# signal. This makes sense in my head...    
-# =============================================================================
-    signal_end_1 = (SNR / np.sqrt(Normalise1)) * Waveform_All_Modes(r_isco_a1,new_t[last_index1:],a1,mu,M,phi,D,Interpolating_Eps_Inf_Functions1)
-    signal_end_2 = (SNR / np.sqrt(Normalise1)) * Waveform_All_Modes(r_isco_a2,new_t[last_index2:],a2,mu,M,phi,D,Interpolating_Eps_Inf_Functions2)
-    
-    alpha = 0.2 # Windowing parameter, specifies length of cosine lobes. 
-# =============================================================================
-#     Here we build our own tukey window. One sided and, more specifically,
-#     a reverse tukey window (1 - window).
-# =============================================================================
-    window1 = []
-    N_1 = len(signal_end_1)
-    for i in range(0,N_1):
-        if i < np.floor(alpha * N_1/2):  # for indices less than the length of the signal
-            window1.append(0.5*(1 + np.cos(np.pi*(2*i/(alpha*N_1) - 1)))) # form window: one sided turkey window
-        else:
-            window1.append(1) # After cosine lobe the tukey window = 1.
-            
-    window2 = []
-    N_2 = len(signal_end_2)
-    for i in range(0,N_2):
-        if i < np.floor(alpha * N_2/2):
-            window2.append(0.5*(1 + np.cos(np.pi*(2*i/(alpha*N_2) - 1))))  # One sided turkey window
-        else:
-            window2.append(1)
-            
-    reverse_tukey1 = 1 - np.array(window1)  # Reverse turkey
-    reverse_tukey2 = 1 - np.array(window2)  # Reverse turkey
-            
-    length_tukey1 = len(signal_end_1)
-    length_tukey2 = len(signal_end_2)   # Compute lengths.
-    
-# =============================================================================
-#     Window both the signals below
-# =============================================================================
-    
-    signal_full_1 = np.concatenate([GW_pad1[0:last_index1],signal_end_1*reverse_tukey1])
-    signal_full_2 = np.concatenate([GW_pad2[0:last_index2],signal_end_2*reverse_tukey2])
-    
-       
-    diff = ((signal_full_1 - signal_full_2))/(2*deriv_perturb) # Compute derivative
-    
-    plt.plot(new_t,diff) 
-    plt.xlabel(r'$\tilde{t}/\eta$')
-    plt.ylabel(r'$\tilde{r}$')
-    plt.title(r'Derivative of Waveform wrt $a$')
-    plt.show()
-    plt.clf()
-    
-# =============================================================================
-#     Compare the effects of windowing by computing uncertainties below.
-# =============================================================================
-    
-    uncertainty_a = np.sqrt(Inner_Prod(deriv,deriv,delta_t,freq_bin,PSD)**-1)   
-    uncertainty_a_windowing = np.sqrt(Inner_Prod(diff,diff,delta_t1,freq_bin,PSD)**-1)
-    
-    print('without windowing',uncertainty_a)
-    print('with windowing',uncertainty_a_windowing)
-
-
-def deriv_GRC(a):
-    """
-    This function computes the derivative of the general relativistic 
-    correction with respect to a. I am finding some really funny results here.
-    Sometimes the derivative of the function blows up and other times it's 
-    perfectly fine.
-    
-    """
-    
-    deriv_perturb = 1e-12
-    
-    a1 = a + deriv_perturb
-    a2 = a - deriv_perturb
-    
-    Interpolating_Eps_Inf_Functions1,Interpolating_Eps_Inf_998_Functions = ExtrapolateInf_All(a1)[0:2]
-    Interpolating_Eps_Inf_Functions2,Interpolating_Eps_Inf_998_Functions = ExtrapolateInf_All(a2)[0:2]
-    
-    # The above extracts the interpolating functions for the flux data for 
-    # each of the spins a1 and a2.
-    
-    Epsfun1 = Interpolating_Eps_Inf_Functions1[0]  # Here we use the m = 2 flux interpolant
-    Epsfun2 = Interpolating_Eps_Inf_Functions2[0]  # Similar.
+        t_rad_reaction = Time_Until_ISCO(a)
+        t_rad_vec.append(t_rad_reaction)
         
-    r_isco1 = risco(a1,1,1)[0]  # ISCO for spin a1
-    r_isco2 = risco(a2,1,1)[0]  # ISCO for spin a2
-    
-    r1 = np.linspace(r_isco1,1.25,10000) # Create radial coordinates for interpolant
-    r2 = np.linspace(r_isco2,1.25,10000) # Same.
-    
-    EpsVal1 = Epsfun1(r1);EpsVal2 = Epsfun2(r2) # Compute values of interpolant at 
-                                                # each r1 and r2.
-    
-    deriv = (EpsVal1 - EpsVal2)/(2*deriv_perturb) # Compute derivative
-# =============================================================================
-#     Plot the results.
-# =============================================================================
-    plt.plot(r1,deriv)
-    plt.title('derivative')
-    plt.show()
-    plt.clf()
+        N_orbits = No_Orbits(a)
+        N_vec.append(N_orbits)
+        print('for a spin of %s, time in NHEK is %s days, NO. orbits %s'%(a,round(t_rad_reaction,4),np.floor(N_orbits)))
+    return a_vec,t_rad_vec,N_vec
 
-    plt.plot(r1,EpsVal1,'r--',label = 'spin+')    
-    plt.plot(r2,EpsVal2,'k',label = 'spin-')
-    plt.legend()
-    plt.title('spin+')
-    plt.show()
-    plt.clf()
-    
-    plt.plot(r2,np.log10(EpsVal2-EpsVal1))
-    plt.title('log plot')
-    plt.ylabel(r'log of difference')
-    plt.xlabel(r'$r$')
-    
+def Plot_Time_Orbits():
 
-       
-def Overlap_primary_mass(M):
-    """
-    My MCMC results are screwing up on the primary mass... here we can 
-    investigate it a little further by computing overlaps of the two signals.
-    """
-# =============================================================================
-#     Parameters
-# =============================================================================
-    a = 0.998
-    mu = 10
-    phi = 3
-    D = 1
-    M_exact = 1e6
-    SNR = 20
-    rinit = 1.32
-# =============================================================================
-#     Extract two signals.
-# =============================================================================
-    GW_M,new_t_exact,delta_t,freq_bin,PSD,Normalise,last_index1 = GW_Normed(SNR,a,mu,M_exact,phi,D,rinit)
-    GW_M_try,new_t_try,delta_t,freq_bin,PSD,Normalise,last_index1 = GW_Normed(SNR,a,mu,M,phi,D,rinit)
     
-    """
+    a_vec,t_rad_vec,N_vec = Info_NHEK()
     
-    In the code, where $M$ appears is simply in the mass ratio (since we) 
-    work in seconds and $r$ is simply rescaled with the total mass M.
+    fig, ax1 = plt.subplots()
+    color = 'tab:red'
+    ax1.set_xlabel(r'$a = 1-10^{-x}$')
+    ax1.set_ylabel(r'$N_{Orb}$', color=color)
+    ax1.set_title('Time and Number of Orbits')
+    ax1.plot(a_vec, N_vec, color=color)
+    ax1.tick_params(axis='y', labelcolor=color)
     
-    As a result, by increasing $M$, eta is made smaller which implies there 
-    are more cycles as a result. Since the time of inspiral scales as 
-    1/eta, the lengths of the (non padded) signal will change.
-
-    We need to be very careful about this. Below is an attempt to 
-    make the signals the same length without destroying any valuable
-    information in the signal.
+    ax2 = ax1.twinx()  # instantiate a second axes that shares the same x-axis
     
-    """
-    if len(GW_M) < len(GW_M_try):  
-        GW_M_try = GW_M_try[0:len(GW_M)] # Truncate new signal GW_M_try so it is
-                                         # the same length as GM_M.
-        new_t_try = new_t_try[0:len(GW_M)] # truncate the times.
-    else:
-        GW_M = GW_M[0:len(GW_M_try)]  # Truncate GW_M so it is of the same length
-                                      # as GW_M_try
-        new_t_exact = new_t_exact[0:len(GW_M_try)] # truncate the times
-        
-        
-    overlap = Overlap(GW_M,GW_M_try,delta_t,freq_bin,PSD) # Compute overlap.
-# =============================================================================
-#     Plot
-# =============================================================================
-    plt.plot(new_t_exact,GW_M_try,'darkviolet')
+    color = 'tab:blue'
+    ax2.set_ylabel(r'$T$ days ', color=color)  # we already handled the x-label with ax1
+    ax2.plot(a_vec, t_rad_vec, color=color)
+    ax2.tick_params(axis='y', labelcolor=color)
+    
+    fig.tight_layout()  # otherwise the right y-label is slightly clipped
     plt.show()
-    plt.clf()
-    plt.plot(new_t_try,GW_M,'blue')
-    print('Overlap is',overlap)
-    
-    
-    
-    
+
+#def diffeqn_back(t,r0,a,EpsFun,r_isco,eta):
+#    '''
+#    This is the differential equation dr0/dt = f(r0) that we wish to numerically integrate.
+#    '''
+#    if r0 == -inf or r0 == inf:
+#
+#        return nan
+#    
+#    elif r0<r_isco:
+#        return nan
+#    else:       
+#        return 1*eta*EpsFun(r0)*(64/5)*((r0)**(3/2) + a)**(-10/3)*  ((1 - (3/r0) + 2*a*((1/r0)**(3/2)))**(3/2))/ ((1-(6/r0) + 8*a*(1/r0)**(3/2) - 3*(a/r0)**2)*((1/r0)**2))  
+#
+##def R_back(a,mu,M):
+#'''
+#INPUTS: Spin a and initial radii to begin inspiral rinit
+#
+#OUTPUTS: inspiral radial trajectory r, Boyer Lindquist time t and sampling interval delta_t
+#This function uses a standard python integrator to numerically integrate the differential equation
+#above. It will return the values r against t alongside the interpolating/extrapolating 
+#functions. Want to generalte inspiral from w0 = 6.714M since this will generate a year longh inspiral.    
+#
+#WARNING: outputs r_insp in units of M. t_insp in units of M/eta. MUST multiply by M * Msun_sec to find equivalent in seconds.
+#'''
+#a = 1-10**-9
+#mu = 10
+#M = 1e6
+#Distance_sec,Msun_sec = units()
+#EpsFun = Extrapolate(a)  # Extract the extrapolating function for the relativistic
+#                         # correction values.
+#
+#r_isco = risco(a,1,1)[0] # Calculate the ISCO at a spin of a
+#
+#
+##rinit = 6.714          # Initial value 6.714M (boundary condition) (year long at a = 1-10**-9)
+#
+#eta = mu/M
+#
+#delta_t = 100 # Choose nice and small delta_t. This is in units of seconds. This is our sampling interval.
+#
+#t0 = 0 # initial time.
+#rinit = r_isco+1e-10
+#r = ode(diffeqn_back, jac = None).set_integrator('lsoda', method='bdf')
+#r.set_initial_value(rinit,t0).set_f_params(a,EpsFun,r_isco,eta)
+##    one_day = 86400
+#
+#t_final = 31536000 # seconds in a year. 
+#
+#r_insp = []
+#t_insp = []
+#
+#j = 10    
+#while r.t < t_final:
+#    # Integrate the ODE in using a while look. The second condition is a criteria to stop.
+##    print(r.t+dt, r.integrate(r.t+dt))< time step and solution r(t+dt).
+#    r_int = r.integrate(r.t+delta_t)[0]   # compute each integrated r value.
+#    if isnan(r_int) == True:
+#        r_int = r_isco + 10**-j
+#        j = j - 1
+#    t_insp.append(r.t+delta_t)  # Append timestep to a list.
+#    r_insp.append(r_int)
+##    print('Last radial coordinate is',r_insp[-1])
+##    delta_t*=(1e6 * Msun_sec/eta)
+##    t_insp *= (1e6 *Msun_sec/eta)  
+##    return np.array(r_insp),np.array(t_insp),delta_t    
+#r_insp.sort(reverse = True)
+#plt.plot(t_insp,r_insp)    
+#    
     
     
     
