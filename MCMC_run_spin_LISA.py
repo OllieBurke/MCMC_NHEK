@@ -89,12 +89,12 @@ printerval = 50  # every 50 iterations we print what the proposal variance is
 target_accept = 0.44  # Single parameter so want to accept 44% of the time.
 adapt_batch = 20  # We adapt the proposal variance every 20 iterations
 a_var_prop = 1e-8   # initial proposal variance for mu
-Ntotal = 20000  # Perform 20,000 iterations
-burnin = 7500  # first 7,500 iterations are for burnin
+Ntotal = 800000  # Perform 80,000 iterations
+burnin = 30000  # first 30000 iterations are for burnin
 
 chain = MCMC_EMRI(n_t, data_freq, freq_bin, SNR, 
                   delta_t, Ntotal, burnin, printerval,
-                  a_var_prop, adapt_batch, target_accept, PSD,Distance_sec,a_max)  # Calculate chain
+                  a_var_prop, adapt_batch, target_accept, PSD,Distance_sec)  # Calculate chain
 
 sampled_a = chain[burnin:]  # Remove burnin values. Sampled from posterior.
 

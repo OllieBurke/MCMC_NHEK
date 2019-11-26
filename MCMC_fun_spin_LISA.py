@@ -117,7 +117,7 @@ def adapt_MH_proposal(i, parameter, log_sd_prop,
 
     
 def MCMC_EMRI(n_t, data_freq, freq_bin, SNR, delta_t, Ntotal, burnin, printerval,
-              a_var_prop, adapt_batch, target_accept, PSD,Distance_Sec,a_max):
+              a_var_prop, adapt_batch, target_accept, PSD,Distance_Sec):
     '''
     MCMC
     '''
@@ -207,7 +207,7 @@ def MCMC_EMRI(n_t, data_freq, freq_bin, SNR, delta_t, Ntotal, burnin, printerval
             a.append(a_prev)  # reject mu_prop and use old value for next iteration
             lp.append(lp_prev)  # similar but with the log posterior
         # Append new value to the end of list
-        print('interation ', i)
+
             
     return(a)
     
