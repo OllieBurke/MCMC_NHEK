@@ -106,23 +106,7 @@ def adapt_MH_proposal(i, parameter, log_sd_prop,
 
 
 
-def Same_Length_Arrays(n, signal_prop):
-   '''
-   This function always either truncated the template or zero pads the template
-   to make sure that it is of the same length as the data. I do need to be
-   careful about zero padding the signal though... working in the frequency domain
-   this could be problematic
-   '''
-   m = len(signal_prop)
-   if (n - m) < 0:  # If length of data is smaller than length of signal
-       index_del = list(range(n, m))  # Calculate indices which we will delete from the signal
-       signal_prop = np.delete(signal_prop,index_del)  # Delete parts of the propposed signal.
-   elif (n - m) > 0:
-       signal_prop = np.pad(signal_prop, (0, n - m), 'constant')# Otherwise pad the signal
-   else:
-       signal_prop = signal_prop
-                                                                 
-   return signal_prop
+
    
    
     
@@ -132,13 +116,13 @@ def Same_Length_Arrays(n, signal_prop):
 #####
 
     
-def MCMC_EMRI(signal_true, data_freq, largest_length, new_t,freq_bin, SNR, delta_t, Ntotal, burnin, printerval,
+def MCMC_EMRI(signal_true, data_freq, largest_length, freq_bin, SNR, delta_t, Ntotal, burnin, printerval,
               a_var_prop, adapt_batch, target_accept, PSD):
     '''
     MCMC
     '''
     n_t = len(signal_true)  # Sample size
-
+    n_f = len(freq_bin)
     
     Nadaptive = burnin
     a_log_sd_prop = np.log(a_var_prop) / 2 
@@ -153,18 +137,19 @@ def MCMC_EMRI(signal_true, data_freq, largest_length, new_t,freq_bin, SNR, delta
     a = []
     a.append(0.999999)  # CAUTION: INITIAL VALUE
     
-    mu = 10  # Same parameter values as before...
-    M = 1e7
-    D = 1
-    phi = 0
-    SNR = 20
-    rinit = 2
-
+    EpsFun = Extrapolate(1-10**-9)  # Extract the extrapolating function for the relativistic
+    Interpolating_Eps_Inf_Functions = ExtrapolateInf_All(1-10**-9)
     
-    Normalise,GW_pad,_,_,r,new_t,Interpolating_Eps_Inf_Functions,delta_t,last_index = Un_Normed(a[0],mu,M,phi,D,rinit)
-    # Exctract a new signal
-    signal_init = (SNR/np.sqrt(Normalise))*GW_pad  # Normalise the signal for SNR = 20
-    signal_init = Pad_Largest_Length(largest_length,signal_init)  # Pad to the longest length a = 1-10^-8
+    SNR = 20
+    mu = 10
+    M = 1e7
+    phi = 0
+    D = 1
+    rinit = 1.2
+    
+    r,t,_ = Radial_Trajectory(a[0],mu,M,rinit,EpsFun)    
+    signal_init = signal(SNR,a,mu,M,phi,D,rinit,Interpolating_Eps_Inf_Functions,
+                         r,t,delta_t,largest_length,freq_bin,PSD,n_f,n_t)
 
     
     signal_init_freq = FFT(signal_init)  # Calculate the fast fourier trnsform (centred)
@@ -209,8 +194,10 @@ def MCMC_EMRI(signal_true, data_freq, largest_length, new_t,freq_bin, SNR, delta
             a_prop = a_prev + np.random.normal(0, np.sqrt(a_var_prop), 1)[0]
 
         # Proppose a new signal which has been normalised with SNR specified.
-        signal_prop,new_t,delta_t,freq_bin,_,Normalise,last_index,max_index = GW_Normed(SNR,a_prop,mu,M,phi,D,rinit)
-        signal_prop = Pad_Largest_Length(largest_length,signal_prop)   # pad to the longest length
+        
+        r,t,_ = Radial_Trajectory(a_prop,mu,M,rinit,EpsFun)    
+        signal_prop = signal(SNR,a_prop,mu,M,phi,D,rinit,Interpolating_Eps_Inf_Functions,
+                             r,t,delta_t,largest_length,freq_bin,PSD,n_f,n_t)
 
         signal_prop_freq = FFT(signal_prop) # Compute signal_prop in frequency domain
         # Compute periodigram
@@ -225,6 +212,7 @@ def MCMC_EMRI(signal_true, data_freq, largest_length, new_t,freq_bin, SNR, delta
             a.append(a_prev)  # reject mu_prop and use old value for next iteration
             lp.append(lp_prev)  # similar but with the log posterior
         # Append new value to the end of list
+        print('interation ', i)
             
     return(a)
     
