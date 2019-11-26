@@ -75,7 +75,7 @@ def diffeqn(t,r0,a,EpsFun,r_isco,eta):
     else:       
         return -1*eta*EpsFun(r0)*(64/5)*((r0)**(3/2) + a)**(-10/3)*  ((1 - (3/r0) + 2*a*((1/r0)**(3/2)))**(3/2))/ ((1-(6/r0) + 8*a*(1/r0)**(3/2) - 3*(a/r0)**2)*((1/r0)**2))  
 
-def Radial_Trajectory(a,mu,M,rinit,EpsFun):
+def Radial_Trajectory(a,mu,M,rinit,EpsFun,a_max):
     '''
     INPUTS: Spin a and initial radii to begin inspiral rinit
     
@@ -86,22 +86,25 @@ def Radial_Trajectory(a,mu,M,rinit,EpsFun):
     
     WARNING: outputs r_insp in units of M. t_insp in units of M/eta. MUST multiply by M * Msun_sec to find equivalent in seconds.
     '''
-    
+
 
                              # correction values.
 
     r_isco = risco(a,1,1)[0] # Calculate the ISCO at a spin of a
     
+    Distance_sec,Msun_sec = units() # Extract solar masses in seconds
+    r_isco_max = risco(a_max,1,1)[0]  # Calculate smallest ISCO.
+                                      # This is the lowest radii that the particle
+                                      # could ever achieve. 
+    f_max = (11 * np.sqrt(Omega(r_isco_max,1,0))/(2*np.pi*M*Msun_sec ))  
+    # Here, in f_max, we calculate the largest frequency possible. 
+    fs = 2*f_max  # Set the sample rate equal to twice the highest frequency.
+    delta_t = int((1/fs) - 1)  # Calculate our samping rate.
+    
 
-    #rinit = 6.714          # Initial value 6.714M (boundary condition) (year long at a = 1-10**-9)
+
     
     eta = mu/M
-    
-    delta_t = 20 # Choose nice and small delta_t.
-                 # This is in units of seconds.
-                 # This is our sampling interval.
-                 # Not sure if we need delta_t this small if we have a large
-                 # primary mass. 
 
     t0 = 0 # initial time.
 
@@ -264,8 +267,8 @@ def Pad_Largest_Length(largest_length,signal):
     return  np.pad(signal,(0,largest_length - len(signal)),'constant')
 
 
-def signal(SNR,a,mu,M,phi,D,rinit,Interpolating_Eps_Inf_Functions,
-           r,t,delta_t,freq_bin,PSD,n_f,n_t,Distance_sec):
+def signal(SNR,a,mu,M,phi,D,rinit,Interpolating_Eps_Inf_Functions,r,
+                     t,delta_t,freq_bin,PSD,n_f,n_t,Distance_sec):
     """
     This function calculates the signal with the parameters mentioned above. 
     The parameter D measures deviations away from having SNR = 20. If D = 0, then
