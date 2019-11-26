@@ -46,14 +46,14 @@ D = 0  # D here measures deviation from distance such that SNR = 20. This is imp
 rinit = risco(0.999,1,1)[0]
 
 a_max = 1-10**-8  # Maximum spin that we will consider in our MCMC
-r,t,delta_t = Radial_Trajectory(a_max,mu,M,rinit,EpsFun)  # We compute the radial trajectory for the 
+r,t,delta_t = Radial_Trajectory(a_max,mu,M,rinit,EpsFun,a_max)  # We compute the radial trajectory for the 
                                    # largest spin so that we pad all of our 
                                    # signals to this length
 
 n_t = len(zero_pad(r))  # Calculate the largest length of the signal in time domain
 
 
-r,t,delta_t = Radial_Trajectory(a_exact,mu,M,rinit,EpsFun)
+r,t,delta_t = Radial_Trajectory(a_exact,mu,M,rinit,EpsFun,a_max)
 
 fs = 1 / delta_t  # Sampling rate (measured in 1/seconds)
 nyquist = fs / 2  # Nyquist frequency 
@@ -89,14 +89,42 @@ printerval = 50  # every 50 iterations we print what the proposal variance is
 target_accept = 0.44  # Single parameter so want to accept 44% of the time.
 adapt_batch = 20  # We adapt the proposal variance every 20 iterations
 a_var_prop = 1e-8   # initial proposal variance for mu
-Ntotal = 800000  # Perform 80,000 iterations
-burnin = 30000  # first 30000 iterations are for burnin
+Ntotal = 30000  # Perform 80,000 iterations
+burnin = 10000  # first 30000 iterations are for burnin
 
 chain = MCMC_EMRI(n_t, data_freq, freq_bin, SNR, 
                   delta_t, Ntotal, burnin, printerval,
-                  a_var_prop, adapt_batch, target_accept, PSD,Distance_sec)  # Calculate chain
+                  a_var_prop, adapt_batch, target_accept, PSD,Distance_sec,a_max)  # Calculate chain
 
 sampled_a = chain[burnin:]  # Remove burnin values. Sampled from posterior.
+print('mean of the chain is ',np.mean(sampled_a))
+print('standard deviation of the chain is ',np.sqrt(np.var(sampled_a)))
+
+plt.plot(np.log10(1 - np.array(chain)))
+plt.ylabel(r'$ a = 1 - 10^{i}$')
+plt.xlabel(r'Iteration')
+plt.title('Trace Plot')
+plt.show()
+plt.clf()
+
+plt.plot(np.log10(1 - np.array(sampled_a)))
+plt.ylabel(r'$ a = 1 - 10^{i}$')
+plt.xlabel(r'Iteration')
+plt.title('Trace Plot after Burnin')
+plt.show()
+plt.clf()
+
+plt.hist(np.log10(1-np.array(sampled_a)),bins = 70)
+plt.xlabel(r'$ a = 1 - 10^{i}$')
+plt.ylabel('Posterior Density')
+plt.title('Histogram')
+plt.show()
+plt.clf()
+
+
+
+
+
 
 
 

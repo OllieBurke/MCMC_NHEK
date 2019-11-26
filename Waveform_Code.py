@@ -19,7 +19,6 @@ from scipy.interpolate import InterpolatedUnivariateSpline
 from scipy import interpolate
 import os
 import warnings
-import matplotlib
 
 matplotlib.rc('xtick', labelsize=12) 
 matplotlib.rc('ytick', labelsize=12) 
@@ -257,7 +256,7 @@ def All_Modes_GW_Waveform(a,mu,M,phi,D,rinit):
             rinit: Initial radius to begin inspiral
     '''
     
-    Interpolating_Eps_Inf_Functions,Interpolating_Eps_Inf_998_Functions = ExtrapolateInf_All(a)[0:2]
+    Interpolating_Eps_Inf_Functions = ExtrapolateInf_All(a)[0:2]
     # Extract interpolating functions
     Distance_sec,Msun_sec = units()  # Extract helpful units
     # Extract the two interpolating functions for the fluxes

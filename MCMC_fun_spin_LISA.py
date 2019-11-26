@@ -117,7 +117,7 @@ def adapt_MH_proposal(i, parameter, log_sd_prop,
 
     
 def MCMC_EMRI(n_t, data_freq, freq_bin, SNR, delta_t, Ntotal, burnin, printerval,
-              a_var_prop, adapt_batch, target_accept, PSD,Distance_Sec):
+              a_var_prop, adapt_batch, target_accept, PSD,Distance_Sec,a_max):
     '''
     MCMC
     '''
@@ -142,7 +142,7 @@ def MCMC_EMRI(n_t, data_freq, freq_bin, SNR, delta_t, Ntotal, burnin, printerval
     D = 0  # D here is now a deviation from the distance which gives SNR = 20.
     rinit = risco(0.999,1,1)[0]
     
-    r,t,_ = Radial_Trajectory(a[0],mu,M,rinit,EpsFun)    
+    r,t,_ = Radial_Trajectory(a[0],mu,M,rinit,EpsFun,a_max)    
     signal_init = signal(SNR,a,mu,M,phi,D,rinit,Interpolating_Eps_Inf_Functions,
                          r,t,delta_t,freq_bin,PSD,n_f,n_t,Distance_sec)
 
@@ -190,7 +190,7 @@ def MCMC_EMRI(n_t, data_freq, freq_bin, SNR, delta_t, Ntotal, burnin, printerval
 
         # Proppose a new signal which has been normalised with SNR specified.
         
-        r,t,_ = Radial_Trajectory(a_prop,mu,M,rinit,EpsFun)    
+        r,t,_ = Radial_Trajectory(a_prop,mu,M,rinit,EpsFun,a_max)    
         signal_prop = signal(SNR,a_prop,mu,M,phi,D,rinit,Interpolating_Eps_Inf_Functions,
                              r,t,delta_t,freq_bin,PSD,n_f,n_t,Distance_sec)
 
