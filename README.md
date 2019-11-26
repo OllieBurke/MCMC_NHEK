@@ -8,3 +8,13 @@ The Waveform_Code.py script is the script which actually builds the waveforms. I
 to estimate how well we can measure certain parameters.
 
 The other codes are my attempts to perform MCMC to estimate the parameters.
+
+To run this code, one needs to have the following open:
+
+Flux_Combo.py
+Fluxes.py
+Waveform_MCMC.py
+MCMC_fun_spin_LISA.py
+MCMC_run_spin_LISA.py
+
+The code Waveform_MCMC.py now generates a signal and avoids unnecessary computation. It's more efficient. The code MCMC_fun_spin_LISA.py is a code full of functions which are used during the MCMC algorithm. The code MCMC_run_spin_LISA.py actually runs the algorithm.
