@@ -13,6 +13,7 @@ Created on Mon Oct 21 09:19:37 2019
 
 @author: Ollie
 """
+import matplotlib
 import scipy
 from scipy import integrate
 from scipy.integrate import ode
@@ -96,13 +97,17 @@ def Radial_Trajectory(a,mu,M,rinit,EpsFun):
     
     eta = mu/M
     
-    delta_t = 1 # Choose nice and small delta_t. This is in units of seconds. This is our sampling interval.
+    delta_t = 1 # Choose nice and small delta_t.
+                # This is in units of seconds.
+                # This is our sampling interval.
+                # Not sure if we need delta_t this small if we have a large
+                # primary mass. 
 
     t0 = 0 # initial time.
 
     r = ode(diffeqn, jac = None).set_integrator('lsoda', method='bdf')
     r.set_initial_value(rinit,t0).set_f_params(a,EpsFun,r_isco,eta)
-#    one_day = 86400
+
     
     r_insp = []
     t_insp = []
@@ -123,9 +128,7 @@ def Radial_Trajectory(a,mu,M,rinit,EpsFun):
             del t_insp[-1]
             break
         j+=1
-#    print('Last radial coordinate is',r_insp[-1])
-#    delta_t*=(1e6 * Msun_sec/eta)
-#    t_insp *= (1e6 *Msun_sec/eta)  
+ 
     return np.array(r_insp),np.array(t_insp),delta_t
 
 def PowerSpectralDensity(f):
@@ -177,7 +180,7 @@ def Factor_E(m):
 def Omega(r,a,m):
     # Particles **dimensionless** angular momenta
     return ((r**(3/2) + a)**-1)**(2 + 2*m/3)
-def Waveform(r,t,a,m,mu,M,phi,D,Interpolating_Eps_Inf_Functions):
+def Waveform(r,t,a,m,mu,M,phi,Interpolating_Eps_Inf_Functions):
     '''
     This code gives, analytically, the expression for a waveform at a particular mode.
     The waveform is the root mean square where we have averaged over the sky. As a result, 
@@ -194,8 +197,8 @@ def Waveform(r,t,a,m,mu,M,phi,D,Interpolating_Eps_Inf_Functions):
     Distance_sec,Msun_sec  = units()    
     secondary = mu * Msun_sec
     primary = M * Msun_sec
-    return (secondary/D) * ((2/(m+2))*np.sqrt(Factor_E(m+2)*Omega(r,a,m+2)* \
-             Interpolating_Eps_Inf_Functions[m](r))/np.sqrt(Omega(r,a,0))) * np.sin((m+2)*(np.sqrt(Omega(r,a,0)))*t/primary + phi)
+    return (secondary) * ((2/(m+2))*np.sqrt(Factor_E(m+2)*Omega(r,a,m+2)* \
+             Interpolating_Eps_Inf_Functions[m](r))/np.sqrt(Omega(r,a,0))) * np.sin((m+2)*((np.sqrt(Omega(r,a,0)))/primary)*t + phi)
 
     
     
@@ -205,29 +208,25 @@ def Waveform_All_Modes(r,t,a,mu,M,phi,D,Interpolating_Eps_Inf_Functions):
     summing each of the individual harmonics (voices). It will build a waveform
     which is not normalised. Here we use 11 harmonics and add them.
     '''
-    return Waveform(r,t,a,0,mu,M,phi,D,Interpolating_Eps_Inf_Functions) + \
-        Waveform(r,t,a,1,mu,M,phi,D,Interpolating_Eps_Inf_Functions) + \
-        Waveform(r,t,a,2,mu,M,phi,D,Interpolating_Eps_Inf_Functions) + \
-        Waveform(r,t,a,3,mu,M,phi,D,Interpolating_Eps_Inf_Functions) + \
-        Waveform(r,t,a,4,mu,M,phi,D,Interpolating_Eps_Inf_Functions) + \
-        Waveform(r,t,a,5,mu,M,phi,D,Interpolating_Eps_Inf_Functions) + Waveform(r,t,a,6,mu,M,phi,D,Interpolating_Eps_Inf_Functions) + \
-        Waveform(r,t,a,7,mu,M,phi,D,Interpolating_Eps_Inf_Functions) + \
-        Waveform(r,t,a,8,mu,M,phi,D,Interpolating_Eps_Inf_Functions) + \
-        Waveform(r,t,a,9,mu,M,phi,D,Interpolating_Eps_Inf_Functions) 
+    return Waveform(r,t,a,0,mu,M,phi,Interpolating_Eps_Inf_Functions) + \
+        Waveform(r,t,a,1,mu,M,phi,Interpolating_Eps_Inf_Functions) + \
+        Waveform(r,t,a,2,mu,M,phi,Interpolating_Eps_Inf_Functions) + \
+        Waveform(r,t,a,3,mu,M,phi,Interpolating_Eps_Inf_Functions) + \
+        Waveform(r,t,a,4,mu,M,phi,Interpolating_Eps_Inf_Functions) + \
+        Waveform(r,t,a,5,mu,M,phi,Interpolating_Eps_Inf_Functions) + Waveform(r,t,a,6,mu,M,phi,Interpolating_Eps_Inf_Functions) + \
+        Waveform(r,t,a,7,mu,M,phi,Interpolating_Eps_Inf_Functions) + \
+        Waveform(r,t,a,8,mu,M,phi,Interpolating_Eps_Inf_Functions) + \
+        Waveform(r,t,a,9,mu,M,phi,Interpolating_Eps_Inf_Functions) 
  
-def zero_pad(data):
-    """
-    This function takes in a vector and zero pads it so it is a power of two.
-    We do this for the O(Nlog_{2}N) cost when we work in the frequency domain.
-    """
-    N = len(data)
-    pow_2 = np.ceil(np.log2(N))
-    return np.pad(data,(0,int((2**pow_2)-N)),'constant')
 
 def FFT(signal):
+    """
+    Computes the centrered fast fourier transform. I delete the zeroth frequency
+    bin so that it coincides with the length of the fourier frequencies.
+    """
     return np.delete(np.fft.rfftn(signal),0)
 
-def Inner_Prod(signal1,signal2,delta_t,freq_bin,PSD,n_f,n_t):
+def Inner_Prod_Sqr(signal,delta_t,freq_bin,PSD,n_f,n_t):
     """ 
     Computes inner product of signal
     IMPORTANT: here we use the DISCRETE fourier transform rather than the 
@@ -238,144 +237,54 @@ def Inner_Prod(signal1,signal2,delta_t,freq_bin,PSD,n_f,n_t):
     
     for the formula
     """
-#    
-#    n_f = len(freq_bin)   # length of signal in frequency doamin
-#    n_t = len(signal1)    # length of signal in the time domain
 
     
-    FFT_Sig1 = FFT(signal1)
-    FFT_Sig2 = FFT(signal2)
+    FFT_Sig_Sqr = abs(FFT(signal))**2  # Centered FFT
+
     
-    Inner_Product = 4*delta_t*sum(np.real((FFT_Sig1 * np.conjugate(FFT_Sig2))) / (n_t * PSD))
+    return 4*delta_t*sum(FFT_Sig_Sqr / (n_t * PSD))
+
+def zero_pad(data):
+    """
+    This function takes in a vector and zero pads it so it is a power of two.
+    We do this for the O(Nlog_{2}N) cost when we work in the frequency domain.
+    """
+    N = len(data)
+    pow_2 = np.ceil(np.log2(N))
+    return np.pad(data,(0,int((2**pow_2)-N)),'constant')
+
+def Pad_Largest_Length(largest_length,signal):
+    """
+    This function pads every signal so it achieves the largest length possible
+    given by the maximum spin we can generate. In this case, we restrict the 
+    spins to a < 1-10^{-8} so we want to pad the signal in question so that it is
+    of equal length to a signal with spin a = 1-10^{-8}.
+    """
     
-    return Inner_Product
+    return  np.pad(signal,(0,largest_length - len(signal)),'constant')
 
-def All_Modes_GW_Waveform(a,mu,M,phi,D,rinit):
-    '''
-    This function creates the un normed gravitational waveform. 
-    INPUTS: a: spin
-            mu: secondary mass
-            M: primary mass
-            phi: initial phase
-            D: distance (set to be 1) and we will normalise the signal later
-            rinit: Initial radius to begin inspiral
-    '''
+
+def signal(SNR,a,mu,M,phi,D,rinit,Interpolating_Eps_Inf_Functions,
+           r,t,delta_t,freq_bin,PSD,n_f,n_t,Distance_sec):
+    """
+    This function calculates the signal with the parameters mentioned above. 
+    The parameter D measures deviations away from having SNR = 20. If D = 0, then
+    SNR = 20. If D > 0 then SNR < 20 and D < 0 then SNR > 20. Could be a good model
+    to measure the deviations from the waveform when distance is taken into account.
     
-    Interpolating_Eps_Inf_Functions = ExtrapolateInf_All(a)
-    # Extract interpolating functions
-    Distance_sec,Msun_sec = units()  # Extract helpful units
-    # Extract the two interpolating functions for the fluxes
-
-    r,t,delta_t = R(a,mu,M,rinit) # Compute trajectories.
-
-    GW = Waveform_All_Modes(r,t,a,mu,M,phi,D,Interpolating_Eps_Inf_Functions)
-    last_index = len(GW)  # Find the length of the time series GW
-    GW_pad = zero_pad(GW)  # Zero pad the data so it is of power of two length
-    new_t = np.concatenate([t,[t[-1] + i*delta_t for i in range(1,(len(GW_pad) - len(GW) + 1))]])
-    # Find new times for zero padded data    
-#    delta_t*=(M * Msun_sec/eta)   # Find sampling interval in seconds. We do 
-                                  # this so that we are not caught out when
-                                  # we take fourier transforms etc.
+    When measuring other parameters, not distance, D = 0. Else, D \neq 0.
+    """
+    un_normalised_signal = Waveform_All_Modes(r,t,a,mu,M,phi,D,Interpolating_Eps_Inf_Functions)
+    GW_pad = Pad_Largest_Length(n_t,un_normalised_signal) # Pad to largest length possible 
     
+    Normalise = Inner_Prod_Sqr(GW_pad,delta_t,freq_bin,PSD,n_f,n_t) # Find normalising factor.
+    distance = (((SNR/np.sqrt(Normalise))**-1)) / (Distance_sec) # Calculate distance (GPCs)
 
-    return GW_pad,r,new_t,Interpolating_Eps_Inf_Functions,delta_t,last_index
-
-
-
-
-def Un_Normed(a,mu,M,phi,D,rinit):
-    '''
-    This function computes the normalising factor so that my signal has
-    SNR equal to whatever I specify. It essentially calculates the distance
-    so that my signal has the SNR of my choice..
-    '''
-    GW_pad,r,new_t,Interpolating_Eps_Inf_Functions,delta_t,last_index = All_Modes_GW_Waveform(a,mu,M,phi,D,rinit) # Extract GW
-    
-    n = len(GW_pad)   # Sample size in the time domain
-    fs = 1 / delta_t  # Sampling rate (measured in 1/seconds)
-    nyquist = fs / 2  # Nyquist frequency 
         
-    if n % 2:  # Odd
-        n_f = (n - 1) // 2  # Note // rather than / for integer division!
-    else:  # Even
-        n_f = n // 2 + 1        
-    freq_bin = np.linspace(0, np.pi, n_f) * nyquist / np.pi # In units of Hz. 
-    freq_bin = np.delete(freq_bin,0)        # Remove the zeroth frequency bin
+    return (1/((distance+D)*Distance_sec))*GW_pad
 
 
-    PSD = PowerSpectralDensity(freq_bin)  # Compute PSD
-    
-    Normalise = Inner_Prod(GW_pad,GW_pad,delta_t,freq_bin,PSD) # Find normalising factor.
 
-    return Normalise,GW_pad,freq_bin,PSD,r,new_t,Interpolating_Eps_Inf_Functions,delta_t,last_index
-
-
-def GW_Normed(SNR,a,mu,M,phi,D,rinit):
-    '''
-    Generates the normalised signal for SNR = whatever I want. 
-    '''  
-    SNR = 20
-    a = 1-10**-9
-    mu = 10
-    M = 1e7
-    phi = 0
-    D = 1
-    rinit = 2  # 1 year with eta = 10^{-6}, M = 1e7 <-- better for NHEK.
-
-    Normalise,GW_pad,freq_bin,PSD,r,new_t,Interpolating_Eps_Inf_Functions,delta_t,last_index = Un_Normed(a,mu,M,phi,D,rinit)
-    # Calculate the Normalising factor
-    Distance_sec,Msun_sec = units()  # Extract helpful units
-    # Read in distance in seconds.
-    Distance = (((SNR/np.sqrt(Normalise))**-1)) / (Distance_sec)
-    
-    # Calculate the distance in Gpc
-    
-    #    GW_check = (1/(Distance*Distance_sec)) * GW_pad
-    
-    GW_pad *= (SNR / np.sqrt(Normalise))  # The signal has SNR for what I specified.
-    max_index = np.argmax(GW_pad)
-    eta = mu/M
-    #    plt.plot(new_t[0:last_index]*eta,GW_pad[0:last_index],'darkviolet')
-    #    plt.ylabel(r'$h$')
-    #    plt.xlabel(r'$\tilde{t}\times\eta$')
-    #    plt.title('Near-Extremal Waveform')
-    
-#    print('length of signal is',new_t[last_index]/(31536000))
-    
-
-    return GW_pad,new_t,delta_t,freq_bin,PSD,Normalise,last_index,max_index
-
-def signal(SNR,a,mu,M,phi,D,rinit,Interpolating_Eps_Inf_Functions,r,t,delta_t,freq_bin,PSD):
-    GW_pad = zero_pad(Waveform_All_Modes(r,t,a,mu,M,phi,D,Interpolating_Eps_Inf_Functions))
-    Normalise = Inner_Prod(GW_pad,GW_pad,delta_t,freq_bin,PSD) # Find normalising factor.
-    return (SNR/np.sqrt(Normalise))*GW_pad
-#
-#
-#EpsFun = Extrapolate(1-10**-9)  # Extract the extrapolating function for the relativistic
-#Interpolating_Eps_Inf_Functions = ExtrapolateInf_All(1-10**-9)
-#SNR = 20
-#a = 1-10**-9
-#mu = 10
-#M = 1e7
-#phi = 0
-#D = 1
-#rinit = 1.2
-#
-#r,t,delta_t = Radial_Trajectory(a,mu,M,rinit,EpsFun)
-#
-#n = len(zero_pad(r))   # Sample size in the time domain
-#fs = 1 / delta_t  # Sampling rate (measured in 1/seconds)
-#nyquist = fs / 2  # Nyquist frequency 
-#    
-#if n % 2:  # Odd
-#    n_f = (n - 1) // 2  # Note // rather than / for integer division!
-#else:  # Even
-#    n_f = n // 2 + 1        
-#freq_bin = np.linspace(0, np.pi, n_f) * nyquist / np.pi # In units of Hz. 
-#freq_bin = np.delete(freq_bin,0)        # Remove the zeroth frequency bin
-#PSD = PowerSpectralDensity(freq_bin)  # Compute PSD
-#
-#waveform = signal(SNR,a,mu,M,phi,D,rinit,Interpolating_Eps_Inf_Functions,r,t,delta_t,freq_bin,PSD)
 
     
     

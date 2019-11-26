@@ -27,68 +27,41 @@ a criteria such that I only zero pad to a length of 1-10^{-9} length of signal.
 import numpy as np
 from scipy import integrate
 
-#def InnerProduct(sig1,sig2,freq_bin,delta_t,PSD):
-#    """
-#    This function is used to compute the inner product between two signals
-#    sig1 and sig2. 
-#    """
-#    n_f = len(freq_bin) # Compute length of positive frequency components
-#    N = len(sig1)       # Compute length of time series
-#    fft_1 = np.fft.fft(sig1)  # Compute dft of sig1
-#    fft_2 = np.fft.fft(sig2)  # Compute dft of sig2
-#    # Below we return in the inner product of two signals sig1 and sig2.
-#    return np.real(sum((fft_1)[0:n_f] * np.conj(fft_2)[0:n_f])/(PSD * N/(4*delta_t)))
 
-def Pad_Largest_Length(largest_length,signal):
-    return  np.pad(signal,(0,largest_length - len(signal)),'constant')
-#def Normalise(SNR,sig1,freq_bin,delta_t,PSD):
-#    """
-#    This function is used to normalise the amplitude of the signal so that 
-#    we get SNR = 1.
-#    """
-#    Normalise_Factor = InnerProduct(sig1,sig1,freq_bin,delta_t,PSD)
-#    return (SNR / np.sqrt(Normalise_Factor)) * sig1
-
-def signal(SNR,a,mu,M,phi,D,rinit,Interpolating_Eps_Inf_Functions,r,t,delta_t,largest_length,freq_bin,PSD,n_f,n_t):
-    """
-    This function calculates the signal with the parameters mentioned above. Here 
-    """
-    un_normalised_signal = zero_pad(Waveform_All_Modes(r,t,a,mu,M,phi,D,Interpolating_Eps_Inf_Functions))
-    GW_pad = Pad_Largest_Length(largest_length,un_normalised_signal)
-    Normalise = Inner_Prod(GW_pad,GW_pad,delta_t,freq_bin,PSD,n_f,n_t) # Find normalising factor.
-    return (SNR/np.sqrt(Normalise))*GW_pad
 
 # =============================================================================
 # Parameters
 # =============================================================================
+Distance_sec,Msun_sec = units() # Extract "units". Don't worry about this.
 EpsFun = Extrapolate(1-10**-9)  # Extract the extrapolating function for the relativistic
 Interpolating_Eps_Inf_Functions = ExtrapolateInf_All(1-10**-9)
 
 SNR = 20
-a_exact = 0.9999
-mu = 10
-M = 1e7
-phi = 0
-D = 1
-rinit = 1.2
+a_exact = 0.9999  # This is the spin we want to find
+mu = 10  # This is the secondary mass  
+M = 1e7  # This is the primary mass
+phi = 0  # This is the initial phase.
+D = 0  # D here measures deviation from distance such that SNR = 20. This is important.
+
+rinit = risco(0.999,1,1)[0]
 
 a_max = 1-10**-8  # Maximum spin that we will consider in our MCMC
 r,t,delta_t = Radial_Trajectory(a_max,mu,M,rinit,EpsFun)  # We compute the radial trajectory for the 
                                    # largest spin so that we pad all of our 
                                    # signals to this length
 
-largest_length = len(zero_pad(r))  # Calculate the largest length of the signal.
-n_t = largest_length
+n_t = len(zero_pad(r))  # Calculate the largest length of the signal in time domain
+
 
 r,t,delta_t = Radial_Trajectory(a_exact,mu,M,rinit,EpsFun)
 
 fs = 1 / delta_t  # Sampling rate (measured in 1/seconds)
 nyquist = fs / 2  # Nyquist frequency 
     
-if largest_length % 2:  # Odd
-    n_f = (largest_length - 1) // 2  # Note // rather than / for integer division!
+if n_t % 2:  # Odd
+    n_f = (n_t - 1) // 2  # Note // rather than / for integer division!
 else:  # Even
-    n_f = largest_length // 2 + 1        
+    n_f = n_t // 2 + 1        
 freq_bin = np.linspace(0, np.pi, n_f) * nyquist / np.pi # In units of Hz. 
 freq_bin = np.delete(freq_bin,0)        # Remove the zeroth frequency bin
 n_f -= 1    # We remove the zeroth frequency bin so take 1 away from length 
@@ -98,7 +71,7 @@ PSD = PowerSpectralDensity(freq_bin)  # Compute PSD
 
 
 signal_true = signal(SNR,a_exact,mu,M,phi,D,rinit,Interpolating_Eps_Inf_Functions,r,
-                     t,delta_t,largest_length,freq_bin,PSD,n_f,n_t)
+                     t,delta_t,freq_bin,PSD,n_f,n_t,Distance_sec)
 
 variance_freq = len(signal_true)*PSD/(4*delta_t) # we have removed the zeroth frequency bin
 
@@ -116,12 +89,12 @@ printerval = 50  # every 50 iterations we print what the proposal variance is
 target_accept = 0.44  # Single parameter so want to accept 44% of the time.
 adapt_batch = 20  # We adapt the proposal variance every 20 iterations
 a_var_prop = 1e-8   # initial proposal variance for mu
-Ntotal = 20000  # Perform 30,000 iterations
-burnin = 7500  # first 10,000 iterations are for burnin
+Ntotal = 20000  # Perform 20,000 iterations
+burnin = 7500  # first 7,500 iterations are for burnin
 
-chain = MCMC_EMRI(signal_true, data_freq, largest_length, freq_bin, SNR, 
+chain = MCMC_EMRI(n_t, data_freq, freq_bin, SNR, 
                   delta_t, Ntotal, burnin, printerval,
-                  a_var_prop, adapt_batch, target_accept, PSD)  # Calculate chain
+                  a_var_prop, adapt_batch, target_accept, PSD,Distance_sec,a_max)  # Calculate chain
 
 sampled_a = chain[burnin:]  # Remove burnin values. Sampled from posterior.
 

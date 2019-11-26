@@ -11,7 +11,7 @@ import scipy as sp
 import random as rd
 import matplotlib.pyplot as plt
 
-def llike(pdgrm, freq, n_t, delta_t, PSD):
+def llike(pdgrm, n_t, delta_t, PSD):
     """
     Computes log (Whittle) likelihood 
     Assumption: Known PSD otherwise need additional term
@@ -48,11 +48,11 @@ def lprior(a):
     return (1-spin_a)*np.log(a) + (1 - spin_b)*np.log(1-a)
 
     
-def lpost(pdgrm, freq, n, delta_t, a_prop,PSD):
+def lpost(pdgrm, n_t, delta_t, a,PSD):
     '''
     Compute log posterior
     '''
-    return(lprior(a_prop) + llike(pdgrm, freq, n, delta_t, PSD))
+    return(lprior(a) + llike(pdgrm, n_t, delta_t, PSD))
 
 
 def accept_reject(lp_prop, lp_prev):
@@ -116,23 +116,18 @@ def adapt_MH_proposal(i, parameter, log_sd_prop,
 #####
 
     
-def MCMC_EMRI(signal_true, data_freq, largest_length, freq_bin, SNR, delta_t, Ntotal, burnin, printerval,
-              a_var_prop, adapt_batch, target_accept, PSD):
+def MCMC_EMRI(n_t, data_freq, freq_bin, SNR, delta_t, Ntotal, burnin, printerval,
+              a_var_prop, adapt_batch, target_accept, PSD,Distance_Sec,a_max):
     '''
     MCMC
     '''
-    n_t = len(signal_true)  # Sample size
+
     n_f = len(freq_bin)
     
     Nadaptive = burnin
     a_log_sd_prop = np.log(a_var_prop) / 2 
-    
-    
-    
-#    freq_bin = np.fft.rfftfreq(n_t,delta_t)
-#    n_f = len(freq_bin)
-#    
-    # Initial value for spin
+ 
+
     
     a = []
     a.append(0.999999)  # CAUTION: INITIAL VALUE
@@ -144,12 +139,12 @@ def MCMC_EMRI(signal_true, data_freq, largest_length, freq_bin, SNR, delta_t, Nt
     mu = 10
     M = 1e7
     phi = 0
-    D = 1
-    rinit = 1.2
+    D = 0  # D here is now a deviation from the distance which gives SNR = 20.
+    rinit = risco(0.999,1,1)[0]
     
     r,t,_ = Radial_Trajectory(a[0],mu,M,rinit,EpsFun)    
     signal_init = signal(SNR,a,mu,M,phi,D,rinit,Interpolating_Eps_Inf_Functions,
-                         r,t,delta_t,largest_length,freq_bin,PSD,n_f,n_t)
+                         r,t,delta_t,freq_bin,PSD,n_f,n_t,Distance_sec)
 
     
     signal_init_freq = FFT(signal_init)  # Calculate the fast fourier trnsform (centred)
@@ -159,7 +154,7 @@ def MCMC_EMRI(signal_true, data_freq, largest_length, freq_bin, SNR, delta_t, Nt
         
     # Initial value for log posterior
     lp = []
-    lp.append(lpost(pdgrm, freq_bin, n_t, delta_t, a[0],PSD)) # append first value
+    lp.append(lpost(pdgrm, n_t, delta_t, a[0],PSD)) # append first value
                                                               # to log posterior.
     
     # Run MCMC
@@ -184,7 +179,7 @@ def MCMC_EMRI(signal_true, data_freq, largest_length, freq_bin, SNR, delta_t, Nt
         
         # Propose spin and do accept/reject step        
         a_prop = a_prev + np.random.normal(0, np.sqrt(a_var_prop), 1)[0]
-        while a_prop < 0.999 or a_prop > 1-10**-8:
+        while a_prop < 0.999 or a_prop > a_max:
             """
             Here we stop the propsed values of spin going before and after
             a certain value. We don't want a spin a < 0.999 because then the
@@ -197,13 +192,13 @@ def MCMC_EMRI(signal_true, data_freq, largest_length, freq_bin, SNR, delta_t, Nt
         
         r,t,_ = Radial_Trajectory(a_prop,mu,M,rinit,EpsFun)    
         signal_prop = signal(SNR,a_prop,mu,M,phi,D,rinit,Interpolating_Eps_Inf_Functions,
-                             r,t,delta_t,largest_length,freq_bin,PSD,n_f,n_t)
+                             r,t,delta_t,freq_bin,PSD,n_f,n_t,Distance_sec)
 
         signal_prop_freq = FFT(signal_prop) # Compute signal_prop in frequency domain
         # Compute periodigram
         pdgrm_prop = abs(data_freq - signal_prop_freq)**2 
         # Compute log posterior
-        lp_prop = lpost(pdgrm_prop, freq_bin, n_t, delta_t, a_prop, PSD)
+        lp_prop = lpost(pdgrm_prop, n_t, delta_t, a_prop, PSD)
         
         if accept_reject(lp_prop, lp_prev) == 1:  # Accept
             a.append(a_prop)  # Accept and mu_prop is sampled
