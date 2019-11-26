@@ -86,7 +86,7 @@ def Radial_Trajectory(a,mu,M,rinit,EpsFun):
     
     WARNING: outputs r_insp in units of M. t_insp in units of M/eta. MUST multiply by M * Msun_sec to find equivalent in seconds.
     '''
-
+    
 
                              # correction values.
 
@@ -97,11 +97,11 @@ def Radial_Trajectory(a,mu,M,rinit,EpsFun):
     
     eta = mu/M
     
-    delta_t = 1 # Choose nice and small delta_t.
-                # This is in units of seconds.
-                # This is our sampling interval.
-                # Not sure if we need delta_t this small if we have a large
-                # primary mass. 
+    delta_t = 20 # Choose nice and small delta_t.
+                 # This is in units of seconds.
+                 # This is our sampling interval.
+                 # Not sure if we need delta_t this small if we have a large
+                 # primary mass. 
 
     t0 = 0 # initial time.
 
