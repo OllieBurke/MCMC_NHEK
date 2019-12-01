@@ -16,7 +16,9 @@ Save the flux data (a5 etc) into some directory. Then open the folder called Mat
 Flux_Combo.py
 Fluxes.py
 Waveform_MCMC.py
-MCMC_full_run
 MCMC_full
+MCMC_run
 
-The code Waveform_MCMC.py now generates a signal and avoids unnecessary computation. It's more efficient. The code MCMC_fun_spin_LISA.py is a code full of functions which are used during the MCMC algorithm. The code MCMC_run_spin_LISA.py actually runs the algorithm.
+The code Waveform_MCMC.py now generates a signal and avoids unnecessary computation. It's more efficient. The code MCMC_full.py is a code full of functions which are used during the MCMC algorithm. The code MCMC_run_spin_LISA.py actually runs the algorithm.
+
+At the moment, the other parameters (secondary mass, primary mass, distance D and initial phase) are commented out. As such, the only parameter that is being estimated is spin. 
